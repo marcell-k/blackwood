@@ -1,0 +1,42 @@
+[project]
+name = "blackwood"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "backtesting>=0.6.5",
+    "matplotlib>=3.11.0",
+    "numpy>=2.4.6",
+    "pandas>=3.0.3",
+    "pandas-stubs>=3.0.3.260530",
+    "plotly>=6.8.0",
+    "sambo>=1.25.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pandas-stubs>=2.0",
+    "basedpyright>=1.39.8",
+    "ruff>=0.15.17",
+]
+
+
+[tool.ruff]
+src = ["src"]
+target-version = "py313"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["blackwood"]
+
+[tool.basedpyright]
+pythonVersion = "3.13"
+venvPath = "."
+venv = ".venv"
+include = ["src"]
+typeCheckingMode = "standard"
