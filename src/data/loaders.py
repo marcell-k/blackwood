@@ -10,15 +10,18 @@ from src.config import (
     BROKER_COMMISSION,
     BROKER_SPREADS,
     CASH,
+    DATA_DIR,
     MARGIN,
     NEWS_CURRENCIES,
+    NEWS_PATH,
     SPLIT_TIME,
     TIMEZONE_INSTRUMENT,
     US_OFFSET_INSTRUMENTS,
 )
 from src.indicators.core import process_news
 
-_NEWS_PATH = "/Users/marci/Trading/Datas/Forex Factory Calendar/news.csv"
+_DATA_DIR = str(DATA_DIR)
+_NEWS_PATH = str(NEWS_PATH)
 _OHLCV_AGG = {
     "Open": "first",
     "High": "max",
@@ -49,7 +52,7 @@ def load_security(
     timezone: str | None = None,
     use_offset: bool | None = True,
     split_time: str = SPLIT_TIME,
-    base_path: str = "/Users/marci/Trading/Datas/DukasCopy",  # "/Users/marci/Trading/Datas/MT5 ICTrading"
+    base_path: str = _DATA_DIR,
     news_df: pd.DataFrame | None = None,
     news_n_bars: int = 1,
     news_impacts: Sequence[str] = ("red", "High Impact Expected"),
@@ -74,9 +77,7 @@ def load_security(
         commission = (0, 0)
         currencies = ("USD", "")
     else:
-        file_granularity = (
-            "M5" if base_path == "/Users/marci/Trading/Datas/MT5 ICTrading" else "M15"
-        )
+        file_granularity = "M5" if base_path == _DATA_DIR else "M15"
         default_tz = TIMEZONE_INSTRUMENT.get(security)
         spread = BROKER_SPREADS.get(security)
         commission = BROKER_COMMISSION.get(security)
@@ -99,9 +100,7 @@ def load_security(
         df_naive.index = df_naive.index.tz_convert(tz)
         df_naive.index = df_naive.index.tz_localize(None)
         origin_naive = pd.Timestamp("2000-01-01 09:30:00")
-        df_resampled = (
-            df_naive.resample(rule, origin=origin_naive).agg(_OHLCV_AGG).dropna()
-        )
+        df_resampled = df_naive.resample(rule, origin=origin_naive).agg(_OHLCV_AGG).dropna()
         df = df_resampled
         df.index = df.index.tz_localize(tz, ambiguous="infer")
     else:
@@ -150,7 +149,7 @@ def run_batch_backtest(
     data: Literal["train", "oos", "df"] = "train",
     cash: float = CASH,
     margin: float = MARGIN,
-    base_path: str = "/Users/marci/Trading/Datas/DukasCopy",  # "/Users/marci/Trading/Datas/MT5 ICTrading"
+    base_path: str = DATA_DIR,
     is_stocks: bool = False,
     force_timezone: str | None = None,
     verbose: bool = True,
@@ -234,9 +233,7 @@ def run_batch_backtest(
                 "Return %": round(stats["Return [%]"], 2),
             }
             if has_sl:
-                result["Mean RRR"] = round(
-                    stats["_trades"]["RiskRewardRatio"].mean(), 2
-                )
+                result["Mean RRR"] = round(stats["_trades"]["RiskRewardRatio"].mean(), 2)
             results_list.append(result)
         except FileNotFoundError:
             print(f"❌ Error: File not found for {symbol}")
@@ -287,7 +284,7 @@ def run_full_suite(
     data: Literal["train", "oos", "df"] = "train",
     cash: float = CASH,
     margin: float = MARGIN,
-    base_path: str = "/Users/marci/Trading/Datas/DukasCopy",  # "/Users/marci/Trading/Datas/MT5 ICTrading"
+    base_path: str = _DATA_DIR,
     symbols: Sequence[str] | None = None,
     is_stocks: bool = False,
     asset_classes: str | tuple[str, ...] = "All",
@@ -322,15 +319,11 @@ def run_full_suite(
             symbols = [s for s in symbols if s not in excluded_set]
 
         if symbols is None and not is_stocks:
-            print(
-                f"⚠ Warning: No valid symbols found for asset classes {asset_classes}"
-            )
+            print(f"⚠ Warning: No valid symbols found for asset classes {asset_classes}")
             return pd.DataFrame(), {}
 
         if symbols is not None and not symbols and not is_stocks:
-            print(
-                f"⚠ Warning: No valid symbols found for asset classes {asset_classes}"
-            )
+            print(f"⚠ Warning: No valid symbols found for asset classes {asset_classes}")
             return pd.DataFrame(), {}
 
     all_equity_curves = {}
@@ -418,7 +411,7 @@ def run_full_suite_berlin_tz(
     data: Literal["train", "oos", "df"] = "train",
     cash: float = CASH,
     margin: float = MARGIN,
-    base_path: str = "/Users/marci/Trading/Datas/DukasCopy",  # "/Users/marci/Trading/Datas/MT5 ICTrading"
+    base_path: str = DATA_DIR,
     symbols: Sequence[str] | None = None,
     is_stocks: bool = False,
     asset_classes: str | tuple[str, ...] = "All",

@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 IS_MONTHS: int = 10
 OOS_MONTHS: int = 3
 KELLY_FRACTION: float = 0.1
@@ -11,6 +14,10 @@ SPLIT_TIME: str = "2024.01.01"
 TRAIN_END: str = "2023-12-31"
 TEST_END: str = "2025-11-30"
 LIVE_START: str = "2025-12-01"
+
+
+DATA_DIR = Path(os.environ.get("BLACKWOOD_DATA_PATH"))
+NEWS_PATH = Path(os.environ.get("BLACKWOOD_NEWS_PATH"))
 
 BROKER_SPREADS = {
     # ===== Crypto =====
