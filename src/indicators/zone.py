@@ -18,7 +18,7 @@ def calculate_combined_pivots(
     zigzag_use_high_low: bool = False,
 ) -> pd.DataFrame:
     """Detect pivots that are BOTH fractals AND zigzag pivots."""
-    n = len(df)
+    len(df)
 
     # Calculate fractals
     fh_value, fl_value, fh_avail, fl_avail = calculate_fractals(
@@ -128,13 +128,11 @@ def get_available_pivots_at_bar(
 
     # Find highs available at bar_index
     for i in range(bar_index):
-        if not np.isnan(high_values[i]) and not np.isnan(high_avail[i]):
-            if high_avail[i] <= bar_index:
-                available_highs.append((i, high_values[i]))
+        if not np.isnan(high_values[i]) and not np.isnan(high_avail[i]) and high_avail[i] <= bar_index:
+            available_highs.append((i, high_values[i]))
 
-        if not np.isnan(low_values[i]) and not np.isnan(low_avail[i]):
-            if low_avail[i] <= bar_index:
-                available_lows.append((i, low_values[i]))
+        if not np.isnan(low_values[i]) and not np.isnan(low_avail[i]) and low_avail[i] <= bar_index:
+            available_lows.append((i, low_values[i]))
 
     return {'highs': available_highs, 'lows': available_lows}
 
@@ -163,10 +161,7 @@ def find_sr_zones(
     df['fractal_low_avail'] = fl_avail
 
     # Determine current detection point
-    if current_bar_idx is None:
-        current_idx = len(df) - 1
-    else:
-        current_idx = min(current_bar_idx, len(df) - 1)
+    current_idx = len(df) - 1 if current_bar_idx is None else min(current_bar_idx, len(df) - 1)
     lookback_start_idx = max(0, current_idx - lookback + 1)
 
     # Calculate ATR for zone width

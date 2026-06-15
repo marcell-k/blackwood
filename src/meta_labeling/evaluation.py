@@ -182,7 +182,7 @@ class XGBoostModelEvaluator:
             ("DEV Set", self.X_dev, self.y_dev),
             ("TEST Set", self.X_test, self.y_test),
         ]
-        for (title, X, y), ax in zip(datasets, axes):
+        for (title, X, y), ax in zip(datasets, axes, strict=True):
             self._plot_single_roc(ax, X, y, title, style)
 
         fig.suptitle("ROC-AUC Curves", fontsize=14, color=style.font_color, y=0.98)
@@ -303,7 +303,7 @@ def run_gate_sweep_and_plot(
         curves_dd.append(dd)
         rows.append(build_row(stats_base, 0.0, 0.0, "Baseline"))
 
-    for g_long, g_short in zip(gate_values_long, gate_values_short):
+    for g_long, g_short in zip(gate_values_long, gate_values_short, strict=True):
         stats = bt.run(gate_col=gate_col, gate_min_long=g_long, gate_min_short=g_short, bet_col=bet_col)
         eq, dd = _interpolate_equity_and_drawdown(stats)
         curves_return.append(eq)
@@ -336,7 +336,7 @@ def run_gate_sweep_and_plot(
         ax1.plot(curves_return[0].index, curves_return[0].values, color=colors[0], lw=2.0, label="Baseline", alpha=0.9)
 
     for i, (g_long, g_short, eq) in enumerate(
-        zip(gate_values_long, gate_values_short, curves_return[start_idx:]), start_idx
+        zip(gate_values_long, gate_values_short, curves_return[start_idx:], strict=True), start_idx
     ):
         if len(eq) == 0:
             continue
@@ -354,7 +354,7 @@ def run_gate_sweep_and_plot(
         ax2.scatter(dd.index[dd.values.argmin()], dd.min(), color=colors[0], s=30, zorder=3, marker="s")
 
     for i, (g_long, g_short, dd) in enumerate(
-        zip(gate_values_long, gate_values_short, curves_dd[start_idx:]), start_idx
+        zip(gate_values_long, gate_values_short, curves_dd[start_idx:], strict=True), start_idx
     ):
         if len(dd) == 0 or np.allclose(dd.values, 0, atol=1e-12):
             continue
@@ -406,7 +406,7 @@ def plot_probability_distributions(prob_train, prob_dev, prob_test, bins: int = 
         (prob_test, "Test", style.accent3),
     ]
 
-    for (prob, label, color), ax in zip(datasets, axes):
+    for (prob, label, color), ax in zip(datasets, axes, strict=True):
         arr = np.asarray(prob)
         ax.hist(arr, bins=bins, alpha=0.7, color=color, edgecolor=style.line, density=True)
         mean_p, median_p = arr.mean(), np.median(arr)

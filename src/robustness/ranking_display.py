@@ -199,7 +199,7 @@ def _truncate_plain(text: str, max_len: int) -> str:
 def _is_missing(v) -> bool:
     try:
         return bool(pd.isna(v))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return v is None
 
 
@@ -231,7 +231,7 @@ def _fmt_pair_value(v) -> str:
         if as_float.is_integer():
             return str(int(as_float))
         return f"{as_float:.2f}"
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return str(v)
 
 
@@ -308,7 +308,7 @@ def _format_train_sharpe(v: object) -> str:
         return C_DIM + "  —" + RESET
     try:
         val = float(v)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return C_DIM + "  —" + RESET
     if math.isnan(val):
         return C_DIM + "  —" + RESET
@@ -377,7 +377,7 @@ def render_row(
 
     # Build row string with padding
     parts = []
-    for cell, (_, col_w, align) in zip(cells, cols):
+    for cell, (_, col_w, align) in zip(cells, cols, strict=True):
         bare_len = len(_strip(cell))
         parts.append(_pad(cell, bare_len, col_w, align))
 

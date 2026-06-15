@@ -430,7 +430,7 @@ class MonteCarloInSampleTester:
             "n_valid_permutations": len(valid_perms),
             "metric": metric,
             "optimize_on_permutation": bool(optimize_on_permutation),
-            "optimized_params": dict(zip(param_names, real_params)) if param_names else {},
+            "optimized_params": dict(zip(param_names, real_params, strict=True)) if param_names else {},
         }
 
     def create_distribution_plot(self, results):
@@ -565,7 +565,7 @@ class MonteCarloInSampleTester:
                 marker=dict(
                     color=self.style.accent2, size=12, symbol="star", line=dict(color=self.style.line, width=2)
                 ),
-                hovertemplate=f"<b>Strategy Position</b><br>{metric}: %{{x:.3f}}<br>Percentile: %{{y:.1f}}%<extra></extra>",
+                hovertemplate=f"<b>Strategy Position</b><br>{metric}: %{{x:.3f}}<br>Percentile: %{{y:.1f}}%<extra></extra>",  # noqa: E501
             ),
             row=2,
             col=1,
@@ -600,7 +600,7 @@ class MonteCarloInSampleTester:
                 marker=dict(
                     color=self.style.accent2, size=14, symbol="star", line=dict(color=self.style.line, width=2)
                 ),
-                hovertemplate=f"<b>Strategy</b><br>Rank: {strategy_rank}<br>{metric}: {real_performance:.3f}<extra></extra>",
+                hovertemplate=f"<b>Strategy</b><br>Rank: {strategy_rank}<br>{metric}: {real_performance:.3f}<extra></extra>",  # noqa: E501
             ),
             row=2,
             col=2,
@@ -930,7 +930,7 @@ def _prepare_p_for_method(pvals: np.ndarray, method: str) -> np.ndarray:
 
 def analyze_multi_metric_p_values(
     final_results: list[dict[str, Any]],
-    metrics: list[str] = ["Profit Factor", "Sharpe Ratio"],
+    metrics: list[str] | None = None,
     significance_level: float = 0.05,
     methods: tuple[str, ...] = ("fisher", "pearson", "stouffer"),
     primary_method: str = "fisher",
@@ -943,6 +943,9 @@ def analyze_multi_metric_p_values(
       - "perm": combines f"{metric}_oos_p_value"
       - "np":   combines f"{metric}_np_oos_p_value"
     """
+    if metrics is None:
+        metrics = ["Profit Factor", "Sharpe Ratio"]
+
     if pvalue_source not in {"perm", "np"}:
         raise ValueError("pvalue_source must be one of {'perm','np'}")
 
@@ -984,7 +987,7 @@ def analyze_multi_metric_p_values(
             print(
                 f"{i + 1:<6} | "
                 f"{_fmt(is_perm, 4):<10} | {_fmt(oos_perm, 4):<10} | {_fmt(oos_np, 4):<10} | "
-                f"{(int(is_tra) if pd.notna(is_tra) else 'NaN')!s:<10} | {(int(oos_tra) if pd.notna(oos_tra) else 'NaN')!s:<11} | "
+                f"{(int(is_tra) if pd.notna(is_tra) else 'NaN')!s:<10} | {(int(oos_tra) if pd.notna(oos_tra) else 'NaN')!s:<11} | "  # noqa: E501
                 f"{_fmt(is_met, 2):<10} | {_fmt(oos_met, 2):<10}"
             )
 

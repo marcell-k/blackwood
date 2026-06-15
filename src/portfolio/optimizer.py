@@ -886,8 +886,10 @@ class RiskParityStrategy(OptimizationStrategy):
         bounds = [(0.0, float(self.max_weight))] * n_assets
         constraints = ({"type": "eq", "fun": lambda w: np.sum(w) - 1.0},)
 
-        objective = lambda w: self._objective_and_gradient(w, cov, budgets)[0]
-        gradient = lambda w: self._objective_and_gradient(w, cov, budgets)[1]
+        def objective(w):
+            return self._objective_and_gradient(w, cov, budgets)[0]
+        def gradient(w):
+            return self._objective_and_gradient(w, cov, budgets)[1]
 
         result = minimize(
             fun=objective,
@@ -2020,13 +2022,7 @@ class OptimalFCalculator(OptimizationStrategy):
         for d in rebal_dates:
             end_loc = ret.index.get_loc(d)
 
-            # ➤ Rolling window (original behavior)
-            if not anchored:
-                start_loc = max(0, end_loc - lookback + 1)
-
-            # ➤ Anchored window (from beginning of dataset)
-            else:
-                start_loc = 0
+            start_loc = max(0, end_loc - lookback + 1) if not anchored else 0
 
             window = ret.iloc[start_loc : end_loc + 1]
 
@@ -2107,10 +2103,7 @@ class OptimalFCalculator(OptimizationStrategy):
                     print(f"Skipping {d}: optimal_f calculation failed - {e}")
                 continue
 
-            if f_star > 1e-6:
-                equity_per_unit_pct = (f_star / abs(largest_loss_mag)) * 100
-            else:
-                equity_per_unit_pct = np.nan
+            equity_per_unit_pct = (f_star / abs(largest_loss_mag)) * 100 if f_star > 1e-6 else np.nan
 
             records.append(
                 {

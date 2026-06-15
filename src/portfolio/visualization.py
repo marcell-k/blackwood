@@ -406,7 +406,7 @@ class PortfolioVisualizer:
     def plot_all_allocation_timelines(self) -> dict[str, go.Figure]:
         figures = {}
 
-        for strategy_name in self.all_results.keys():
+        for strategy_name in self.all_results:
             fig = self.plot_allocation_timeline(strategy_name)
             figures[strategy_name] = fig
 
@@ -531,7 +531,7 @@ class PortfolioVisualizer:
     def show_all_plots(self):
         self.plot_equity_and_drawdown().show()
 
-        for strategy_name in self.all_results.keys():
+        for strategy_name in self.all_results:
             self.plot_allocation_timeline(strategy_name).show()
 
         self.plot_allocation_comparison().show()

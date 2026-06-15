@@ -697,7 +697,7 @@ class BinaryModelXGBoost:
 
             if stability["unstable_features"]:
                 print(
-                    f"\n⚠ {len(stability['unstable_features'])} features with >{drop_threshold * 100:.0f}% importance drop on dev:"
+                    f"\n{len(stability['unstable_features'])} features with >{drop_threshold * 100:.0f}% importance drop on dev:"  # noqa: E501
                 )
                 for feat in stability["unstable_features"][:10]:
                     drop_pct = (
@@ -714,7 +714,7 @@ class BinaryModelXGBoost:
 
             stable_features = stability["importance_drops"].nsmallest(10, "importance_drop_pct")
             print("\nTop 10 most stable features (smallest importance drop):")
-            for idx, row in stable_features.iterrows():
+            for _idx, row in stable_features.iterrows():
                 print(
                     f"  {row['rank_train']:2d}. {row['feature']:30s} | "
                     f"Train: {row['importance_mean_train']:.4f} | "
@@ -884,7 +884,7 @@ class BinaryModelXGBoost:
         try:
             importance_dict = optuna.importance.get_param_importances(study)
         except Exception as e:
-            raise ValueError(f"Could not compute parameter importance: {e!s}")
+            raise ValueError(f"Could not compute parameter importance: {e!s}") from e
 
         if not importance_dict:
             raise ValueError("No parameter importance available (insufficient trials)")

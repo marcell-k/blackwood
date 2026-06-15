@@ -282,7 +282,7 @@ def _create_equal_weight_portfolio(equity_curves: dict[str, pd.Series]) -> pd.Se
 
 def run_full_suite(
     strategy_cls: type,
-    timeframes: list[str] = ["5min", "15min", "30min", "1h", "2h", "4h", "D", "W"],
+    timeframes: list[str] = None,
     indicator_fn: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     data: Literal["train", "oos", "df"] = "train",
     cash: float = CASH,
@@ -296,6 +296,8 @@ def run_full_suite(
     create_portfolios: bool = False,
     verbose: bool = False,
 ) -> tuple[pd.DataFrame, dict[str, dict[str, pd.Series]]]:
+    if timeframes is None:
+        timeframes = ["5min", "15min", "30min", "1h", "2h", "4h", "D", "W"]
     if isinstance(exclude_assets, str):
         exclude_assets = (exclude_assets,)
 
@@ -411,7 +413,7 @@ def run_full_suite(
 
 def run_full_suite_berlin_tz(
     strategy_cls: type,
-    timeframes: list[str] = ["5min", "15min", "30min", "1h", "2h", "4h", "D", "W"],
+    timeframes: list[str] = None,
     indicator_fn: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     data: Literal["train", "oos", "df"] = "train",
     cash: float = CASH,
@@ -424,6 +426,8 @@ def run_full_suite_berlin_tz(
     create_portfolios: bool = False,
     verbose: bool = True,
 ) -> tuple[pd.DataFrame, dict[str, dict[str, pd.Series]]]:
+    if timeframes is None:
+        timeframes = ["5min", "15min", "30min", "1h", "2h", "4h", "D", "W"]
     return run_full_suite(
         strategy_cls=strategy_cls,
         timeframes=timeframes,

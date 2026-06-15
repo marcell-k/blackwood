@@ -87,7 +87,7 @@ def compare_outputs(a, b, _depth=0):
         if len(a) != len(b):
             return False, f"Length mismatch: {len(a)} vs {len(b)}"
 
-        for i, (elem_a, elem_b) in enumerate(zip(a, b)):
+        for i, (elem_a, elem_b) in enumerate(zip(a, b, strict=True)):
             match, msg = compare_outputs(elem_a, elem_b, _depth + 1)
             if not match:
                 return False, f"Element [{i}]: {msg}"
@@ -156,10 +156,9 @@ def compare_outputs(a, b, _depth=0):
             return True, "Numeric values equal"
         return False, f"Values differ: {a} vs {b}"
 
-    # Fallback: direct equality
     try:
         return (True, "Outputs equal") if a == b else (False, "Outputs differ")
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         return False, f"Cannot compare {type(a).__name__} vs {type(b).__name__}"
 
 
@@ -204,7 +203,7 @@ def compare_functions(
     """Benchmark and compare two functions for performance, memory, and correctness."""
     results = {}
 
-    for label, fn in zip(labels, (fn_a, fn_b)):
+    for label, fn in zip(labels, (fn_a, fn_b), strict=True):
         bench_fn = benchmark(
             repeats=repeats,
             warmup=warmup,

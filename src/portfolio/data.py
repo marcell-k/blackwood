@@ -1,25 +1,14 @@
-# ============================================================================
-# Standard library
-# ============================================================================
 import glob
 import itertools
 import os
 
 import matplotlib.pyplot as plt
-
-# ============================================================================
-# Third-party libraries
-# ============================================================================
 import numpy as np
 import pandas as pd
 import seaborn as sns
 from numba import njit
 from scipy.stats import entropy
 from sklearn.feature_selection import mutual_info_regression
-
-# ============================================================================
-# Local application imports
-# ============================================================================
 from src.visualization.style import DEFAULT_STYLE
 
 
@@ -75,9 +64,9 @@ def load_strategy_files(
 
         # Filter equity by start_date if provided
         if start_date is not None:
-            original_len = len(equity_series)
+            len(equity_series)
             equity_series = equity_series[equity_series.index >= start_date]
-            filtered_len = len(equity_series)
+            len(equity_series)
             # print(f"  {strategy_name} equity: {original_len:,} -> {filtered_len:,} points")
 
         equity_dict[strategy_name] = equity_series
@@ -95,9 +84,9 @@ def load_strategy_files(
 
             # Filter trades by EntryTime if start_date provided
             if start_date is not None and "EntryTime" in trades_df.columns:
-                original_trades = len(trades_df)
+                # original_trades = len(trades_df)
                 trades_df = trades_df[trades_df["EntryTime"] >= start_date].reset_index(drop=True)
-                filtered_trades = len(trades_df)
+                # filtered_trades = len(trades_df)
                 # print(f"  {strategy_name} trades: {original_trades} -> {filtered_trades} trades")
 
             trades_dict[strategy_name] = trades_df

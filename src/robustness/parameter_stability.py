@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import contextlib
 from collections.abc import Sequence
 from typing import Any
 
@@ -51,9 +54,7 @@ class OptunaStabilityAnalyzer:
     def extract_completed_trials(self) -> pd.DataFrame:
         completed = self.trials_df.loc[self.trials_df["state"].astype(str) == "COMPLETE"].copy()
 
-        rename_map = {
-            f"params_{name}": name for name in self.param_space.keys() if f"params_{name}" in completed.columns
-        }
+        rename_map = {f"params_{name}": name for name in self.param_space if f"params_{name}" in completed.columns}
         completed = completed.rename(columns=rename_map)
 
         if "value" not in completed.columns:
@@ -62,7 +63,7 @@ class OptunaStabilityAnalyzer:
         completed["score"] = pd.to_numeric(completed["value"], errors="coerce")
         completed = completed.dropna(subset=["score"]).reset_index(drop=True)
 
-        for param_name in self.param_space.keys():
+        for param_name in self.param_space:
             if param_name in completed.columns:
                 completed[param_name] = pd.to_numeric(completed[param_name], errors="coerce")
 
@@ -79,7 +80,7 @@ class OptunaStabilityAnalyzer:
     ) -> list[str]:
         available_numeric_params = [
             param_name
-            for param_name in self.param_space.keys()
+            for param_name in self.param_space
             if param_name in completed_trials.columns
             and pd.api.types.is_numeric_dtype(completed_trials[param_name])
             and completed_trials[param_name].notna().any()
@@ -169,7 +170,7 @@ class OptunaStabilityAnalyzer:
         if fallback is not None and is_candidate(fallback):
             return fallback
 
-        for param_name in self.param_space.keys():
+        for param_name in self.param_space:
             if is_candidate(param_name):
                 return param_name
         return None
@@ -244,7 +245,7 @@ class OptunaStabilityAnalyzer:
 
         discrete_params = [
             param_name
-            for param_name in self.param_space.keys()
+            for param_name in self.param_space
             if param_name in top_trials.columns and top_trials[param_name].nunique(dropna=True) <= 10
         ]
         if discrete_params:
@@ -700,7 +701,7 @@ class OptunaStabilityAnalyzer:
         cbar = plt.colorbar(hb, ax=ax)
         cbar.set_label(self.metric_name, fontsize=8)
 
-        try:
+        with contextlib.suppress(Exception):
             ax.tricontour(
                 data[x_param].to_numpy(),
                 data[y_param].to_numpy(),
@@ -710,8 +711,6 @@ class OptunaStabilityAnalyzer:
                 linewidths=1.0,
                 alpha=0.7,
             )
-        except Exception:
-            pass
 
         top5 = data.nlargest(min(5, len(data)), "score")
         ax.scatter(
@@ -899,7 +898,7 @@ class OptunaStabilityAnalyzer:
             ax.set_title("Coefficient of Variation Comparison")
             return
 
-        x_pos = np.arange(len(param_names))
+        np.arange(len(param_names))
         width = 0.38
         cv_all = [float(metrics[p]["cv_all"]) for p in param_names if p in metrics]
         cv_top = [float(metrics[p]["cv_top"]) for p in param_names if p in metrics]
@@ -937,7 +936,7 @@ class OptunaStabilityAnalyzer:
     ) -> None:
         discrete_params = [
             name
-            for name in self.param_space.keys()
+            for name in self.param_space
             if name in completed_trials.columns
             and pd.api.types.is_numeric_dtype(completed_trials[name])
             and 1 < completed_trials[name].dropna().nunique() <= 10

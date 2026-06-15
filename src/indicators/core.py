@@ -181,13 +181,11 @@ def compute_combined_volatility(
     trading_periods: int = 252,
 ) -> pd.DataFrame:
 
-    # Work with Series directly from DataFrame (preserve index)
     o = df["Open"]
     h = df["High"]
-    l = df["Low"]
+    l = df["Low"]  # noqa: E741
     c = df[price_col]
 
-    # Pre-compute logs as Series (keeps index)
     log_hl = np.log(h / l)
     log_ho = np.log(h / o)
     log_lo = np.log(l / o)
@@ -356,7 +354,10 @@ def add_overnight_and_week_gap_features(
 # ==============================
 def calculate_rsi(df: pd.DataFrame, length: int | None = None) -> float:
     """Calculate RSI."""
-    rma = lambda x, n: x.ewm(alpha=1 / n, adjust=False).mean()
+
+    def rma(x, n):
+        return x.ewm(alpha=1 / n, adjust=False).mean()
+
     delta = df["Close"].diff()
     gain = delta.copy()
     loss = delta.copy()
@@ -373,8 +374,11 @@ def calculate_rsi(df: pd.DataFrame, length: int | None = None) -> float:
 
 def calculate_adx(df: pd.DataFrame, dilen: int = 14, adxlen: int = 14):
     """Calculate ADX."""
-    rma = lambda x, n: x.ewm(alpha=1 / n, adjust=False).mean()
-    h, l, c = df["High"], df["Low"], df["Close"]
+
+    def rma(x, n):
+        return x.ewm(alpha=1 / n, adjust=False).mean()
+
+    h, l, c = df["High"], df["Low"], df["Close"]  # noqa: E741
     up, dn = h.diff(), -l.diff()
     pDM = pd.Series(np.where((up > dn) & (up > 0), up, 0), index=df.index)
     mDM = pd.Series(np.where((dn > up) & (dn > 0), dn, 0), index=df.index)
@@ -493,7 +497,7 @@ def squeeze_momentum(
     # === SQUEEZE DETECTION ===
     sqzOn = (lowerBB > lowerKC) & (upperBB < upperKC)
     sqzOff = (lowerBB < lowerKC) & (upperBB > upperKC)
-    noSqz = ~(sqzOn | sqzOff)
+    ~(sqzOn | sqzOff)
 
     # === MOMENTUM CALCULATION (regular OLS) ===
     highest_len = high.rolling(window=lengthKC, min_periods=lengthKC).max()
@@ -509,7 +513,7 @@ def squeeze_momentum(
     val = slope  # momentum proxy: positive slope = upward momentum, negative = downward
 
     return val, sqzOn
-    # return pd.DataFrame({'val': val,'sqzOn': sqzOn.astype(int),'sqzOff': sqzOff.astype(int),'noSqz': noSqz.astype(int),'upperBB': upperBB,'lowerBB': lowerBB,'upperKC': upperKC,'lowerKC': lowerKC}, index=df.index)
+    # return pd.DataFrame({'val': val,'sqzOn': sqzOn.astype(int),'sqzOff': sqzOff.astype(int),'noSqz': noSqz.astype(int),'upperBB': upperBB,'lowerBB': lowerBB,'upperKC': upperKC,'lowerKC': lowerKC}, index=df.index) # noqa: E501
 
 
 def calculate_roc(df: pd.DataFrame, period: int) -> pd.Series:
@@ -1410,7 +1414,9 @@ def process_news(
         return news_flags
 
     # Resolve incoming schema to canonical names
-    _norm = lambda name: "".join(ch for ch in str(name).lower() if ch.isalnum())
+    def _norm(name):
+        return "".join(ch for ch in str(name).lower() if ch.isalnum())
+
     col_map = {_norm(c): c for c in news_raw.columns}
 
     date_col = next((col_map[k] for k in ["datetime", "date", "time", "timestamp"] if k in col_map), None)
@@ -1883,7 +1889,7 @@ def find_optimal_d(
             adf_stat = adfuller(clean, maxlag=10, regression="c", autolag="AIC")[0]
             if adf_stat < adf_threshold:
                 return d, adf_stat, len(clean)
-        except:
+        except Exception:
             continue
 
     # Fallback to full differencing

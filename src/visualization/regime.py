@@ -83,10 +83,7 @@ def plot_regime_candlesticks(
     y_top = price_max + price_pad
 
     # Step 5: Extend dates for perfect bar coverage
-    if n_bars > 1:
-        last_delta = dates[-1] - dates[-2]
-    else:
-        last_delta = np.timedelta64(1, "D")
+    last_delta = dates[-1] - dates[-2] if n_bars > 1 else np.timedelta64(1, "D")
     extended_end = dates[-1] + last_delta
     extended_dates = np.append(dates, extended_end)
 
@@ -121,7 +118,7 @@ def plot_regime_candlesticks(
         starts = np.concatenate(([0], change_indices))
         ends = np.concatenate((change_indices, [n_bars]))
 
-        for start_idx, end_idx in zip(starts, ends):
+        for start_idx, end_idx in zip(starts, ends, strict=True):
             rid = regime_labels[start_idx]
             line_color, _ = color_map[rid]
             fill_color = hex_to_rgba(line_color, fill_alpha)
@@ -141,7 +138,7 @@ def plot_regime_candlesticks(
                 diff = np.diff(padded.astype(int))
                 trans_starts = np.where(diff == 1)[0]
                 trans_ends = np.where(diff == -1)[0]
-                for s, e in zip(trans_starts, trans_ends):
+                for s, e in zip(trans_starts, trans_ends, strict=True):
                     shapes.append(_make_rect(dates[s], extended_dates[e], transition_fill, layer="above"))
 
     # Step 8: Range breaks

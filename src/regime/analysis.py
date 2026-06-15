@@ -1,4 +1,3 @@
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -27,7 +26,6 @@ def analyze_regime_statistics(df: pd.DataFrame, regime_directions: dict[int, int
         if int(regime) not in regime_directions:
             regime_directions[int(regime)] = 1  # Default to long
 
-    # PERFORMANCE FIX: Use assign() instead of copy()
     df_work = df.assign(
         returns=df["Close"].pct_change(),
         regime_tradeable=df["regime"].shift(1),
@@ -43,11 +41,7 @@ def analyze_regime_statistics(df: pd.DataFrame, regime_directions: dict[int, int
     df_work = df_work.assign(volatility=df_work["returns"].rolling(20).std() * np.sqrt(252))
 
     def calculate_max_drawdown_per_period(returns: pd.Series) -> float:
-        r"""
-        Calculate maximum drawdown from returns series.
-
-        Formula: \( DD_t = \frac{\prod_{i=1}^{t}(1+r_i) - \max_{s \leq t}\prod_{i=1}^{s}(1+r_i)}{\max_{s \leq t}\prod_{i=1}^{s}(1+r_i)} \)
-        """
+        """Calculate maximum drawdown from returns series."""
         if len(returns) == 0 or returns.isna().all():
             return 0.0
 
@@ -321,18 +315,18 @@ def analyze_regime_statistics(df: pd.DataFrame, regime_directions: dict[int, int
     ax3.set_xticklabels([f"R{int(r)}" for r in transition_probs.columns])
     ax3.set_yticklabels([f"R{int(r)}" for r in transition_probs.index])
 
-    for i in range(len(transition_probs.index)):
-        for j in range(len(transition_probs.columns)):
-            text = ax3.text(
-                j,
-                i,
-                f"{transition_probs.values[i, j]:.2f}",
-                ha="center",
-                va="center",
-                color="white",
-                fontweight="bold",
-                fontsize=9,
-            )
+    # for i in range(len(transition_probs.index)):
+    #     for j in range(len(transition_probs.columns)):
+    #         text = ax3.text(
+    #             j,
+    #             i,
+    #             f"{transition_probs.values[i, j]:.2f}",
+    #             ha="center",
+    #             va="center",
+    #             color="white",
+    #             fontweight="bold",
+    #             fontsize=9,
+    #         )
 
     ax3.set_xlabel("Next Regime", fontsize=11, fontweight="bold")
     ax3.set_ylabel("Current Regime", fontsize=11, fontweight="bold")
@@ -375,32 +369,32 @@ def analyze_regime_statistics(df: pd.DataFrame, regime_directions: dict[int, int
     ax5 = plt.subplot(4, 3, 5)
 
     regimes_sorted = regime_stats["Regime"].values
-    var_values = regime_stats["VaR_5pct_Ann"].values * 100
-    cvar_values = regime_stats["CVaR_5pct_Ann"].values * 100
-
+    # var_values = regime_stats["VaR_5pct_Ann"].values * 100
+    # cvar_values = regime_stats["CVaR_5pct_Ann"].values * 100
+    #
     x_pos = np.arange(len(regimes_sorted))
-    width = 0.35
+    # width = 0.35
 
-    bars1 = ax5.bar(
-        x_pos - width / 2,
-        var_values,
-        width,
-        label="VaR (5%)",
-        color=colors[0],
-        alpha=0.8,
-        edgecolor="white",
-        linewidth=1.5,
-    )
-    bars2 = ax5.bar(
-        x_pos + width / 2,
-        cvar_values,
-        width,
-        label="CVaR (5%)",
-        color=colors[1],
-        alpha=0.8,
-        edgecolor="white",
-        linewidth=1.5,
-    )
+    # bars1 = ax5.bar(
+    #     x_pos - width / 2,
+    #     var_values,
+    #     width,
+    #     label="VaR (5%)",
+    #     color=colors[0],
+    #     alpha=0.8,
+    #     edgecolor="white",
+    #     linewidth=1.5,
+    # )
+    # bars2 = ax5.bar(
+    #     x_pos + width / 2,
+    #     cvar_values,
+    #     width,
+    #     label="CVaR (5%)",
+    #     color=colors[1],
+    #     alpha=0.8,
+    #     edgecolor="white",
+    #     linewidth=1.5,
+    # )
 
     ax5.set_ylabel("Annualized Tail Risk (%)", fontsize=11, fontweight="bold")
     ax5.set_xlabel("Regime", fontsize=11, fontweight="bold")
@@ -548,7 +542,7 @@ def analyze_regime_statistics(df: pd.DataFrame, regime_directions: dict[int, int
     np.random.seed(43)
 
     regimes_with_dd = []
-    for i, regime in enumerate(unique_regimes):
+    for _, regime in enumerate(unique_regimes):
         regime_period_mdd = periods[periods["regime"] == regime]["max_drawdown"].values * 100
 
         if len(regime_period_mdd) > 0:
@@ -626,7 +620,7 @@ def analyze_regime_statistics(df: pd.DataFrame, regime_directions: dict[int, int
     ax12.set_ylabel("Maximum Drawdown (%)", fontsize=11, fontweight="bold")
     ax12.set_title("Max DD in Longest Period", fontweight="bold", fontsize=12)
 
-    for bar, val in zip(bars, longest_period_mdd):
+    for bar, val in zip(bars, longest_period_mdd, strict=True):
         height = bar.get_height()
         ax12.text(
             bar.get_x() + bar.get_width() / 2.0,

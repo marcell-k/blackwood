@@ -101,7 +101,7 @@ class BinaryModelBagging:
             max_features=1.0,  # avoid double feature subsampling
             bootstrap=params.get("bootstrap", True),
             bootstrap_features=False,
-            oob_score=True if params.get("bootstrap", True) else False,
+            oob_score=params.get("bootstrap", True),
             random_state=self.random_state,
             n_jobs=6,
         )

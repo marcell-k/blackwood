@@ -21,7 +21,6 @@ def aggregate_trades(trades: pd.DataFrame) -> pd.DataFrame:
 
     gb = sorted_trades.groupby("EntryBar", sort=False)
 
-    # Base: preserve original columns from the first trade (min ExitBar) in each group, excluding EntryBar to avoid duplication
     base = gb[[col for col in trades.columns if col != "EntryBar"]].first()
 
     # Aggregations (all vectorized)

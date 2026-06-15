@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any
 
 import matplotlib.dates as mdates
@@ -5,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.stats import genpareto
-from src.config import ANNUAL_TRADING_DAYS, CASH
+from src.config import ANNUAL_TRADING_DAYS, CASH, RANDOM_STATE
 from src.metrics.core import compute_all_metrics
 from src.visualization.style import DEFAULT_STYLE
 
@@ -83,10 +84,7 @@ class PortfolioAnalyzer:
         """
         returns_dict: dict[str, pd.Series] = {}
         for name, equity in self.equity_dict.items():
-            if resample_rule:
-                equity_series = equity.resample(resample_rule).last().ffill()
-            else:
-                equity_series = equity
+            equity_series = equity.resample(resample_rule).last().ffill() if resample_rule else equity
 
             returns_dict[name] = equity_series.pct_change().dropna()
 
@@ -408,7 +406,9 @@ class PortfolioReporter:
         # 4) Pre-normalize scale_factors_timeseries dates and attach per-strategy freq/lookback metadata
         #    Strategy names in scale_factors_timeseries_dict keys should match raw base names (without _Normalized).
         #    If they are normalized names, keep them; allocations lookup below tries both variants.
-        normalized_scale_data = {}  # strategy -> DataFrame with 'date_norm', 'annual_vol', 'scale_factor', 'rebalance_freq', 'lookback'
+        # strategy -> DataFrame with 'date_norm', 'annual_vol', 'scale_factor', 'rebalance_freq', 'lookback'
+
+        normalized_scale_data = {}
         for strategy_name, scale_df in scale_factors_timeseries_dict.items():
             if scale_df is None or len(scale_df) == 0:
                 continue
@@ -429,7 +429,7 @@ class PortfolioReporter:
             eff_lb = None
 
             # Try to extract from any portfolio that carries metadata for this strategy
-            for p_name, meta in portfolio_meta.items():
+            for _p_name, meta in portfolio_meta.items():
                 fdict = meta["freq_dict"]
                 ldict = meta["lookback_dict"]
                 if isinstance(fdict, dict) and strategy_name in fdict and eff_freq is None:
@@ -481,7 +481,7 @@ class PortfolioReporter:
         #             }
 
         #     if not scale_snapshot:
-        #         print(f"  ⚠️  No scale data for {rebal_date.strftime('%Y-%m-%d')} (may not be a rebalance date for strategies)")
+        #         print(f"    No scale data for {rebal_date.strftime('%Y-%m-%d')} (may not be a rebalance date)")
         #         continue
 
         #     # Header
@@ -511,7 +511,7 @@ class PortfolioReporter:
         #         lb = scale_snapshot[strategy_name]['lookback']
 
         #         # Allow both raw and normalized strategy key when pulling allocations
-        #         normalized_key = strategy_name if strategy_name.endswith('_Normalized') else f"{strategy_name}_Normalized"
+        #         normalized_key = strategy_name if strategy_name.endswith('_Normalized') else f"{strategy_name}_Normalized" # noqa: E501
         #         raw_key = strategy_name.replace('_Normalized', '')
 
         #         row_str = (
@@ -559,7 +559,7 @@ class PortfolioReporter:
                 annual_vols = entry["annual_vols"]
                 scale_factors = entry["scale_factors"]
 
-                for strategy_name in annual_vols.keys():
+                for strategy_name in annual_vols:
                     if strategy_name not in strategy_scales:
                         strategy_scales[strategy_name] = {"vols": [], "scales": []}
 
@@ -567,7 +567,7 @@ class PortfolioReporter:
                     strategy_scales[strategy_name]["scales"].append(scale_factors[strategy_name])
 
             print(
-                f"  {'Strategy':<15} | {'Avg Annual Vol':<18} | {'Avg Scale Factor':<18} | {'Min Scale':<12} | {'Max Scale':<12}"
+                f"  {'Strategy':<15} | {'Avg Annual Vol':<18} | {'Avg Scale Factor':<18} | {'Min Scale':<12} | {'Max Scale':<12}"  # noqa: E501
             )
             print(f"  {'-' * 15}|{'-' * 20}|{'-' * 20}|{'-' * 14}|{'-' * 14}")
 
@@ -581,7 +581,8 @@ class PortfolioReporter:
                 max_scale = np.max(scales)
 
                 print(
-                    f"  {strategy_name:<15} | {avg_vol:>18.2%} | {avg_scale:>18.3f}x | {min_scale:>12.3f}x | {max_scale:>12.3f}x"
+                    f"  {strategy_name:<15} | {avg_vol:>18.2%} | {avg_scale:>18.3f}x | "
+                    f"{min_scale:>12.3f}x | {max_scale:>12.3f}x"
                 )
 
             print()
@@ -770,7 +771,7 @@ class PortfolioReporter:
             scale_df, left_index=True, right_index=True, suffixes=("_weight", "_scale")
         ).sort_index()
 
-        freq_offset = pd.tseries.frequencies.to_offset(rebalance_freq)
+        # freq_offset = pd.tseries.frequencies.to_offset(rebalance_freq)
 
         last_dates = merged.index[-2:]
 
@@ -917,10 +918,7 @@ class PortfolioReporter:
             # Contribution
             # If denominator is None, we assume this row IS the total (100%)
             total_ret = returns_series.sum()
-            if contribution_denominator:
-                contrib = total_ret / contribution_denominator * 100
-            else:
-                contrib = 100.0
+            contrib = total_ret / contribution_denominator * 100 if contribution_denominator else 100.0
 
             return {
                 "Day": label,
@@ -1079,7 +1077,7 @@ def print_mixed_results(results_df):
     print(header_str)
     print(sep_line)
 
-    for i, row in results_df.iterrows():
+    for _i, row in results_df.iterrows():
         # Add a separator line before the Weekly row for visual distinction
         if row["Day"] == "Weekly (Agg)":
             print(sep_line)
@@ -1116,11 +1114,6 @@ def format_metrics(metrics: pd.Series) -> None:
                 print(f"{metric:<25} {value:.2f}")
         else:
             print(f"{metric:<25} {value}")
-
-
-from dataclasses import dataclass
-
-from src.config import RANDOM_STATE
 
 
 @dataclass
@@ -1238,7 +1231,6 @@ class MonteCarloAnalyzer:
         # Step 1: Extract returns from equity
         returns = equity.pct_change().dropna().values
         initial_capital = equity.iloc[0]
-        dates = equity.index
 
         # Validate data
         if len(returns) < block_size:

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Callable
 from typing import Any
 
@@ -83,10 +85,10 @@ class WalkForwardOptimizer:
         if use_validation:
             if val_dfs is None or len(val_dfs) != len(self.train_dfs):
                 raise ValueError(f"use_validation=True requires val_dfs of length {len(self.train_dfs)}")
-            periods = zip(self.train_dfs, val_dfs, self.test_dfs)
+            periods = zip(self.train_dfs, val_dfs, self.test_dfs, strict=True)
             has_validation = True
         else:
-            periods = zip(self.train_dfs, self.test_dfs)
+            periods = zip(self.train_dfs, self.test_dfs, strict=True)
             has_validation = False
 
         self.optimize_results = []
@@ -158,7 +160,8 @@ class WalkForwardOptimizer:
                 print(f"PROCESSING PERIOD {idx + 1}/{n_periods}")
                 if has_validation:
                     print(
-                        f"Train: {self._fmt_period(train_df)} | Val: {self._fmt_period(val_df)} | Test: {self._fmt_period(test_df)}"
+                        f"Train: {self._fmt_period(train_df)} | Val: {self._fmt_period(val_df)} | "
+                        f"Test: {self._fmt_period(test_df)}"
                     )
                     cols = ["Train", "Validation", "Test"]
                     stats_sources = [stats_train_dict, val_stats_dict, stats_test_dict]
@@ -225,7 +228,7 @@ class WalkForwardOptimizer:
         pairs: list[tuple[float, float]] = []
         is_wins = is_trades = oos_wins = oos_trades = 0
 
-        for st, ts in zip(stats_train_list, stats_test_list):
+        for st, ts in zip(stats_train_list, stats_test_list, strict=True):
             tr_is = int(pd.to_numeric(st.get("# Trades", np.nan), errors="coerce") or 0)
             tr_oos = int(pd.to_numeric(ts.get("# Trades", np.nan), errors="coerce") or 0)
             if tr_is < is_min_trades or tr_oos < oos_min_trades:
@@ -338,7 +341,7 @@ class WalkForwardOptimizer:
         print(f"\n{line}")
         print(f"{'WFE SCORECARD':^120}")
         print(
-            f"{(title.upper() + ' | Training: ' + str(train_period_months) + 'mo | Testing: ' + str(test_period_months) + 'mo | Periods: ' + str(total_periods)):^120}"
+            f"{(title.upper() + ' | Training: ' + str(train_period_months) + 'mo | Testing: ' + str(test_period_months) + 'mo | Periods: ' + str(total_periods)):^120}"  # noqa: E501
         )
         print(f"{line}")
         print("\nPERFORMANCE SUMMARY")

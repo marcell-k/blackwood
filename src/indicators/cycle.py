@@ -19,8 +19,9 @@ def extend_signal_numba(signal: np.ndarray, n: int) -> np.ndarray:
             continue
     return result
 
+
 def get_typical_price(df: pd.DataFrame) -> pd.Series:
-    return ((df['High'] + df['Low'] + df['Close']) / 3).to_numpy(np.float64)
+    return ((df["High"] + df["Low"] + df["Close"]) / 3).to_numpy(np.float64)
 
 
 # ------------------------------------------------------------------------------
@@ -59,43 +60,42 @@ def _homodyne_discriminator_kernel(price, cycpart, min_period=6.0, max_period=50
 
         # 1. Smooth Data (4-bar WMA)
         # Formula: (4*P + 3*P[1] + 2*P[2] + 1*P[3]) / 10
-        smooth[i] = (4 * price[i] + 3 * price[i-1] +
-                     2 * price[i-2] + 1 * price[i-3]) / 10.0
+        smooth[i] = (4 * price[i] + 3 * price[i - 1] + 2 * price[i - 2] + 1 * price[i - 3]) / 10.0
 
         # 2. Amplitude Correction using PREVIOUS Period
-        amp_corr = 0.075 * period[i-1] + 0.54
+        amp_corr = 0.075 * period[i - 1] + 0.54
 
         # 3. Detrender (Hilbert Transform part 1)
-        detrender[i] = (0.0962 * smooth[i] + 0.5769 * smooth[i-2] -
-                        0.5769 * smooth[i-4] - 0.0962 * smooth[i-6]) * amp_corr
+        detrender[i] = (
+            0.0962 * smooth[i] + 0.5769 * smooth[i - 2] - 0.5769 * smooth[i - 4] - 0.0962 * smooth[i - 6]
+        ) * amp_corr
 
         # 4. Compute Q1 (Quadrature) and I1 (InPhase)
-        q1[i] = (0.0962 * detrender[i] + 0.5769 * detrender[i-2] -
-                 0.5769 * detrender[i-4] - 0.0962 * detrender[i-6]) * amp_corr
-        i1[i] = detrender[i-3]
+        q1[i] = (
+            0.0962 * detrender[i] + 0.5769 * detrender[i - 2] - 0.5769 * detrender[i - 4] - 0.0962 * detrender[i - 6]
+        ) * amp_corr
+        i1[i] = detrender[i - 3]
 
         # 5. Advance Phase of I1 and Q1 by 90 degrees (jI, jQ)
-        jI[i] = (0.0962 * i1[i] + 0.5769 * i1[i-2] -
-                 0.5769 * i1[i-4] - 0.0962 * i1[i-6]) * amp_corr
-        jQ[i] = (0.0962 * q1[i] + 0.5769 * q1[i-2] -
-                 0.5769 * q1[i-4] - 0.0962 * q1[i-6]) * amp_corr
+        jI[i] = (0.0962 * i1[i] + 0.5769 * i1[i - 2] - 0.5769 * i1[i - 4] - 0.0962 * i1[i - 6]) * amp_corr
+        jQ[i] = (0.0962 * q1[i] + 0.5769 * q1[i - 2] - 0.5769 * q1[i - 4] - 0.0962 * q1[i - 6]) * amp_corr
 
         # 6. Phasor Addition for 3-bar averaging
         i2[i] = i1[i] - jQ[i]
         q2[i] = q1[i] + jI[i]
 
         # 7. Smooth I2 and Q2
-        i2[i] = 0.2 * i2[i] + 0.8 * i2[i-2] # Note: Ehlers often uses i-2 here for smoothing
-        q2[i] = 0.2 * q2[i] + 0.8 * q2[i-2]
+        i2[i] = 0.2 * i2[i] + 0.8 * i2[i - 2]  # Note: Ehlers often uses i-2 here for smoothing
+        q2[i] = 0.2 * q2[i] + 0.8 * q2[i - 2]
 
         # 8. Homodyne Discriminator
         # Signal * ComplexConjugate(Signal[1])
-        re[i] = i2[i] * i2[i-1] + q2[i] * q2[i-1]
-        im[i] = i2[i] * q2[i-1] - q2[i] * i2[i-1]
+        re[i] = i2[i] * i2[i - 1] + q2[i] * q2[i - 1]
+        im[i] = i2[i] * q2[i - 1] - q2[i] * i2[i - 1]
 
         # 9. Smooth Re and Im
-        re[i] = 0.2 * re[i] + 0.8 * re[i-1]
-        im[i] = 0.2 * im[i] + 0.8 * im[i-1]
+        re[i] = 0.2 * re[i] + 0.8 * re[i - 1]
+        im[i] = 0.2 * im[i] + 0.8 * im[i - 1]
 
         # 10. Calculate Period
         # Logic: Period = 2*pi / PhaseChange. PhaseChange = arctan(Im/Re)
@@ -103,14 +103,14 @@ def _homodyne_discriminator_kernel(price, cycpart, min_period=6.0, max_period=50
             # use arctan to get radians, result is in bars
             period[i] = 2 * np.pi / np.arctan(im[i] / re[i])
         else:
-            period[i] = period[i-1] # Carry forward if undefined
+            period[i] = period[i - 1]  # Carry forward if undefined
 
         # 11. Clamp Period change rate (max 50% increase, max 33% decrease)
         # Prevents wild swings in period calculation
-        if period[i] > 1.5 * period[i-1]:
-            period[i] = 1.5 * period[i-1]
-        if period[i] < 0.67 * period[i-1]:
-            period[i] = 0.67 * period[i-1]
+        if period[i] > 1.5 * period[i - 1]:
+            period[i] = 1.5 * period[i - 1]
+        if period[i] < 0.67 * period[i - 1]:
+            period[i] = 0.67 * period[i - 1]
 
         # 12. Clamp hard bounds (6 to 50 bars)
         if period[i] < min_period:
@@ -119,8 +119,8 @@ def _homodyne_discriminator_kernel(price, cycpart, min_period=6.0, max_period=50
             period[i] = max_period
 
         # 13. Smooth Period
-        period[i] = 0.2 * period[i] + 0.8 * period[i-1]
-        smooth_period[i] = 0.33 * period[i] + 0.67 * smooth_period[i-1]
+        period[i] = 0.2 * period[i] + 0.8 * period[i - 1]
+        smooth_period[i] = 0.33 * period[i] + 0.67 * smooth_period[i - 1]
 
         # 14. Final Domain Cycle Calculation
         # Applies the user scalar 'cycpart' (usually 0.5 to get half-cycle)
@@ -129,9 +129,13 @@ def _homodyne_discriminator_kernel(price, cycpart, min_period=6.0, max_period=50
 
     return dom_cycle
 
-def ehler_dominant_cycle(price: pd.Series, cycpart: float = 0.5, min_period: int=6, max_period: int=50) -> pd.Series:
+
+def ehler_dominant_cycle(
+    price: pd.Series, cycpart: float = 0.5, min_period: int = 6, max_period: int = 50
+) -> pd.Series:
     dom_cycle_vals = _homodyne_discriminator_kernel(price, cycpart, min_period, max_period)
     return dom_cycle_vals
+
 
 # ------------------------------------------------------------------------------
 # Adaptive Ehlers Filter
@@ -140,10 +144,10 @@ def ehler_dominant_cycle(price: pd.Series, cycpart: float = 0.5, min_period: int
 def _adaptive_ehlers_filter_kernel(price, dominant_period, momentum_ratio=0.25, length_mult: float = 1.0):
     """
     Adaptive Ehlers Filter using dominant cycle period.
-    
+
     The filter uses momentum-weighted coefficients where both the lookback window
     and the momentum lag scale with the measured cycle period.
-    
+
     Parameters
     ----------
     price : ndarray
@@ -152,7 +156,7 @@ def _adaptive_ehlers_filter_kernel(price, dominant_period, momentum_ratio=0.25, 
         Adaptive period in bars (from Homodyne Discriminator).
     momentum_ratio : float
         Fraction of period to use as momentum lag (default 0.25 = quarter cycle).
-        
+
     Returns
     -------
     filt : ndarray
@@ -205,11 +209,9 @@ def _adaptive_ehlers_filter_kernel(price, dominant_period, momentum_ratio=0.25, 
 
     return filt
 
+
 def adaptive_ehlers_filter(price, dominant_period, momentum_ratio: float = 0.25, length_mult: float = 1.0):
-    if isinstance(price, pd.Series):
-        price_arr = price.values.astype(np.float64)
-    else:
-        price_arr = np.asarray(price, dtype=np.float64)
+    price_arr = price.values.astype(np.float64) if isinstance(price, pd.Series) else np.asarray(price, dtype=np.float64)
 
     if isinstance(dominant_period, pd.Series):
         period_arr = dominant_period.values.astype(np.float64)
@@ -344,16 +346,12 @@ def adaptive_atr_ehlers(
     # Reference period: midpoint of observed adaptive_period if not given
     if period_ref is None:
         valid_period = period_arr[np.isfinite(period_arr)]
-        if valid_period.size > 0:
-            period_ref = 0.5 * (valid_period.min() + valid_period.max())
-        else:
-            period_ref = 20.0  # safe fallback
+        period_ref = 0.5 * (valid_period.min() + valid_period.max()) if valid_period.size > 0 else 20.0
 
     # Raw multiplier proportional to period / period_ref
     with np.errstate(divide="ignore", invalid="ignore"):
         mult_raw = base_multiplier * (period_arr / period_ref)
 
-    # Replace invalids with base_multiplier
     mult_raw[~np.isfinite(mult_raw)] = base_multiplier
 
     mult_clipped = np.clip(mult_raw, min_multiplier, max_multiplier)
@@ -363,10 +361,10 @@ def adaptive_atr_ehlers(
     stop_unit = atr_series * mult_series
     stop_unit.name = "ATR_StopUnit_Ehlers"
 
-    return atr_series#, mult_series, stop_unit
+    return atr_series  # , mult_series, stop_unit
 
 
-# ------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Adaptive RSI using Ehlers dominant cycle period
 # ------------------------------------------------------------------------------
 @jit(nopython=True)
@@ -411,6 +409,7 @@ def _adaptive_rsi_kernel(close_prices: np.ndarray, smooth_period: np.ndarray, cy
             rsi[t] = 50.0
 
     return rsi
+
 
 @jit(nopython=True)
 def _laguerre_rsi_kernel(
@@ -502,6 +501,7 @@ def _laguerre_rsi_kernel(
 
     return out
 
+
 def laguerre_rsi(
     df: pd.DataFrame,
     gamma: float = 0.5,
@@ -524,6 +524,7 @@ def laguerre_rsi(
     vals = _laguerre_rsi_kernel(price, dummy_sp, 1.0, gamma, False)
     return pd.Series(vals, index=df.index, name=f"LagRSI(gamma={gamma})")
 
+
 def adaptive_laguerre_rsi(
     df: pd.DataFrame,
     cyc_part: float = 0.5,
@@ -542,18 +543,17 @@ def adaptive_laguerre_rsi(
         Leading values can be NaN during cycle warmup.
 
     """
-    required_cols = ['High', 'Low', 'Close']
+    required_cols = ["High", "Low", "Close"]
     missing = [col for col in required_cols if col not in df.columns]
     if missing:
         raise ValueError(f"DataFrame missing required columns: {missing}")
 
     typical = ((df["High"] + df["Low"] + df["Close"]) / 3.0).to_numpy(np.float64)
-    smooth_period = ehler_dominant_cycle(
-        typical, cycpart=1.0, min_period=min_period, max_period=max_period
-    )
+    smooth_period = ehler_dominant_cycle(typical, cycpart=1.0, min_period=min_period, max_period=max_period)
 
     vals = _laguerre_rsi_kernel(typical, smooth_period, cyc_part, 0.5, True)
     return pd.Series(vals, index=df.index, name="AdaptiveLagRSI")
+
 
 def adaptive_rsi(
     df: pd.DataFrame,
@@ -563,11 +563,11 @@ def adaptive_rsi(
 ) -> pd.Series:
     """
     Ehlers-style adaptive RSI based on homodyne period estimation.
-    
+
     The RSI lookback window adapts to the dominant market cycle,
     making it more responsive during short cycles (trending) and
     smoother during long cycles (ranging).
-    
+
     Parameters
     ----------
     df : pd.DataFrame
@@ -592,14 +592,14 @@ def adaptive_rsi(
     - Cycle estimation uses typical price, while RSI momentum uses Close deltas.
 
     """
-    required_cols = ['High', 'Low', 'Close']
+    required_cols = ["High", "Low", "Close"]
     missing = [col for col in required_cols if col not in df.columns]
     if missing:
         raise ValueError(f"DataFrame missing required columns: {missing}")
 
     # Calculate typical price for cycle detection
-    price = ((df['High'] + df['Low'] + df['Close']) / 3).to_numpy(np.float64)
-    close = df['Close'].to_numpy(np.float64)
+    price = ((df["High"] + df["Low"] + df["Close"]) / 3).to_numpy(np.float64)
+    close = df["Close"].to_numpy(np.float64)
 
     # Get dominant cycle period (returns numpy array)
     smooth_period = ehler_dominant_cycle(price, cycpart=1.0, min_period=min_period, max_period=max_period)
@@ -608,7 +608,7 @@ def adaptive_rsi(
     rsi_values = _adaptive_rsi_kernel(close, smooth_period, cyc_part)
 
     # Return as Series with original index
-    return pd.Series(rsi_values, index=df.index, name='AdaptiveRSI')
+    return pd.Series(rsi_values, index=df.index, name="AdaptiveRSI")
 
 
 # ------------------------------------------------------------------------------
@@ -616,26 +616,22 @@ def adaptive_rsi(
 # ------------------------------------------------------------------------------
 @jit(nopython=True)
 def _adaptive_stochastic_kernel(
-    high: np.ndarray,
-    low: np.ndarray,
-    close: np.ndarray,
-    smooth_period: np.ndarray,
-    cyc_part: float
+    high: np.ndarray, low: np.ndarray, close: np.ndarray, smooth_period: np.ndarray, cyc_part: float
 ) -> np.ndarray:
     r"""
     JIT-compiled kernel for adaptive stochastic calculation.
-    
+
     Stochastic Formula:
     $$
     \text{Stochastic}_t = \frac{C_t - LL}{HH - LL} \times 100
     $$
-    
+
     where:
     - $C_t$ = Close price at bar t
     - $LL$ = Lowest low over adaptive window
     - $HH$ = Highest high over adaptive window
     - Adaptive window = $\lfloor \text{cyc_part} \times \text{smooth_period}_t \rfloor$
-    
+
     Parameters
     ----------
     high : np.ndarray
@@ -648,7 +644,7 @@ def _adaptive_stochastic_kernel(
         Dominant cycle period estimate at each bar (from ehler_dominant_cycle)
     cyc_part : float
         Fraction of cycle period to use as lookback window
-        
+
     Returns
     -------
     np.ndarray
@@ -696,6 +692,7 @@ def _adaptive_stochastic_kernel(
 
     return stoch
 
+
 def adaptive_stochastic(
     df: pd.DataFrame,
     cyc_part: float = 0.5,
@@ -703,18 +700,18 @@ def adaptive_stochastic(
     max_period: float = 50.0,
 ) -> pd.Series:
     # Validate required columns
-    required_cols = ['High', 'Low', 'Close']
+    required_cols = ["High", "Low", "Close"]
     missing = [col for col in required_cols if col not in df.columns]
     if missing:
         raise ValueError(f"DataFrame missing required columns: {missing}")
 
     # Calculate typical price for cycle detection (Ehlers convention)
-    price = ((df['High'] + df['Low'] + df['Close']) / 3).to_numpy(np.float64)
+    price = ((df["High"] + df["Low"] + df["Close"]) / 3).to_numpy(np.float64)
 
     # Extract OHLC arrays
-    high = df['High'].to_numpy(np.float64)
-    low = df['Low'].to_numpy(np.float64)
-    close = df['Close'].to_numpy(np.float64)
+    high = df["High"].to_numpy(np.float64)
+    low = df["Low"].to_numpy(np.float64)
+    close = df["Close"].to_numpy(np.float64)
 
     # Get dominant cycle period (returns numpy array)
     # NOTE: Assumes ehler_dominant_cycle function exists in scope
@@ -722,32 +719,30 @@ def adaptive_stochastic(
         price,
         cycpart=1.0,  # Use full cycle for period measurement
         min_period=min_period,
-        max_period=max_period
+        max_period=max_period,
     )
 
     # Calculate adaptive stochastic
     stoch_values = _adaptive_stochastic_kernel(high, low, close, smooth_period, cyc_part)
 
     # Return as Series with original index
-    return pd.Series(stoch_values, index=df.index, name='AdaptiveStochastic')
+    return pd.Series(stoch_values, index=df.index, name="AdaptiveStochastic")
 
 
 # ------------------------------------------------------------------------------
 # Adaptive CCI using Ehlers dominant cycle period
 # ------------------------------------------------------------------------------
 
+
 @jit(nopython=True)
 def _mean_absolute_deviation_kernel(
-    typical_price: np.ndarray,
-    sma: np.ndarray,
-    smooth_period: np.ndarray,
-    cyc_part: float
+    typical_price: np.ndarray, sma: np.ndarray, smooth_period: np.ndarray, cyc_part: float
 ) -> np.ndarray:
     """
     Calculate mean absolute deviation (MAD) using adaptive windows.
-    
+
     MAD = (1/n) * Σ|TP_i - SMA_i| over adaptive window length
-    
+
     Parameters
     ----------
     typical_price : np.ndarray
@@ -758,7 +753,7 @@ def _mean_absolute_deviation_kernel(
         Dominant cycle period at each bar
     cyc_part : float
         Fraction of cycle to use as window length
-        
+
     Returns
     -------
     np.ndarray
@@ -802,6 +797,7 @@ def _mean_absolute_deviation_kernel(
 
     return mad
 
+
 def adaptive_cci(
     df: pd.DataFrame,
     cyc_part: float = 0.5,
@@ -811,23 +807,23 @@ def adaptive_cci(
 ) -> pd.Series:
     """
     Ehlers-style adaptive CCI based on homodyne period estimation.
-    
+
     The CCI lookback window adapts to the dominant market cycle,
     making it more responsive during short cycles (trending) and
     smoother during long cycles (ranging).
-    
+
     Mathematical Formulation:
     $$
     CCI_t = \\frac{TP_t - SMA_t(TP)}{c \\cdot MAD_t}
     $$
-    
+
     where:
     - $TP_t = (H_t + L_t + C_t) / 3$ (Typical Price)
     - $SMA_t(TP)$ = Simple Moving Average over adaptive window
     - $MAD_t = \\frac{1}{n} \\sum_{i=t-n+1}^{t} |TP_i - SMA_i|$ (Mean Absolute Deviation)
     - $c = 0.015$ (Lambert's constant, normalizes ~70-80% of values within ±100)
     - $n = \\lfloor cyc\\_part \\times period_t \\rfloor$ (adaptive window length)
-    
+
     Parameters
     ----------
     df : pd.DataFrame
@@ -842,26 +838,26 @@ def adaptive_cci(
     constant : float, default 0.015
         Lambert's scaling constant. Standard CCI uses 0.015.
         Modify only if empirically justified for specific asset class.
-    
+
     Returns
     -------
     pd.Series
         Adaptive CCI values (typically range ±100, but unbounded).
         NaN where insufficient data for cycle detection or calculation.
-        
+
     Notes
     -----
     - Unlike fixed-period CCI, this adapts to market regime changes
     - Shorter detected cycles → faster CCI response (good for trends)
     - Longer detected cycles → smoother CCI (good for ranges)
     - No look-ahead bias: all calculations use [0:t] historical data only
-    
+
     Validation Requirements
     -----
     - Backtest with strict point-in-time simulation (no future data leakage)
     - Verify cycle period bounds (min_period, max_period) match asset frequency
     - Compare distributions vs fixed-period CCI(20) for regime detection
-    
+
     Performance Characteristics
     -----
     - Time: O(n) for rolling SMA + O(n×k) for MAD kernel ≈ O(n×k_avg)
@@ -870,16 +866,11 @@ def adaptive_cci(
 
     """
     # Calculate typical price (used for both cycle detection and CCI)
-    typical_price = ((df['High'] + df['Low'] + df['Close']) / 3).to_numpy(np.float64)
+    typical_price = ((df["High"] + df["Low"] + df["Close"]) / 3).to_numpy(np.float64)
 
     # Get dominant cycle period (returns numpy array)
     # Assumes ehler_dominant_cycle is available from your codebase
-    smooth_period = ehler_dominant_cycle(
-        typical_price,
-        cycpart=1.0,
-        min_period=min_period,
-        max_period=max_period
-    )
+    smooth_period = ehler_dominant_cycle(typical_price, cycpart=1.0, min_period=min_period, max_period=max_period)
 
     # Calculate adaptive SMA using pandas rolling
     # Strategy: Use maximum possible window for rolling, then select adaptive values
@@ -894,12 +885,7 @@ def adaptive_cci(
     sma = sma_series.to_numpy(np.float64)
 
     # Calculate adaptive mean absolute deviation (MAD)
-    mad = _mean_absolute_deviation_kernel(
-        typical_price,
-        sma,
-        smooth_period,
-        cyc_part
-    )
+    mad = _mean_absolute_deviation_kernel(typical_price, sma, smooth_period, cyc_part)
 
     # Calculate CCI
     # CCI = (TP - SMA) / (constant * MAD)
@@ -907,14 +893,10 @@ def adaptive_cci(
 
     # Vectorized calculation where MAD is valid
     valid_mask = np.isfinite(mad) & (mad > 1e-10)
-    cci[valid_mask] = (
-        (typical_price[valid_mask] - sma[valid_mask]) /
-        (constant * mad[valid_mask])
-    )
+    cci[valid_mask] = (typical_price[valid_mask] - sma[valid_mask]) / (constant * mad[valid_mask])
 
     # Return as Series with original index
-    return pd.Series(cci, index=df.index, name='Adaptive_CCI')
-
+    return pd.Series(cci, index=df.index, name="Adaptive_CCI")
 
 
 # ------------------------------------------------------------------------------
@@ -947,15 +929,12 @@ def rolling_geometric_mean(returns: pd.Series, window: int) -> pd.Series:
 
     # Re-align with pandas index (pad NaNs at start)
     result = np.full(len(returns), np.nan)
-    result[window-1:] = geo_mean
+    result[window - 1 :] = geo_mean
 
     return pd.Series(result, index=returns.index, name="geometric_mean")
 
-def rolling_geometric_bollinger_bands(
-    price: pd.Series,
-    window: int = 20,
-    num_std: float = 2.0
-):
+
+def rolling_geometric_bollinger_bands(price: pd.Series, window: int = 20, num_std: float = 2.0):
     """Geometric Bollinger Bands with adaptive Ehlers middle band."""
     # --- Returns ---
     returns = price.pct_change()
@@ -971,22 +950,23 @@ def rolling_geometric_bollinger_bands(
     part_a = rolling_var + gmean_plus_1**2
 
     # Avoid exploding with large powers by clipping
-    annualized_var = (part_a.clip(lower=1e-12))**window - (gmean_plus_1.clip(lower=1e-12))**(2 * window)
+    annualized_var = (part_a.clip(lower=1e-12)) ** window - (gmean_plus_1.clip(lower=1e-12)) ** (2 * window)
 
     rolling_geo_std = np.sqrt(annualized_var.clip(lower=0)) * 100  # percent
 
     # Ensure Series alignment
     rolling_geo_std = pd.Series(rolling_geo_std.values, index=price.index, name="geo_std")
 
-
     # --- Middle Band (adaptive Ehlers filter) ---
-    middle_band_np = adaptive_ehlers_filter(price=price.values.astype(np.float64),
-        dominant_period=ehler_dominant_cycle(price.values.astype(np.float64),cycpart=1.0,min_period=6,max_period=50),
-        length_mult=0.5,momentum_ratio=0.7)
+    middle_band_np = adaptive_ehlers_filter(
+        price=price.values.astype(np.float64),
+        dominant_period=ehler_dominant_cycle(price.values.astype(np.float64), cycpart=1.0, min_period=6, max_period=50),
+        length_mult=0.5,
+        momentum_ratio=0.7,
+    )
 
     # Convert back to aligned Series
     middle_band = pd.Series(middle_band_np, index=price.index, name="middle_band")
-
 
     # --- Final Bands ---
     # Geometric std as percentage → convert to price points
@@ -998,22 +978,21 @@ def rolling_geometric_bollinger_bands(
     upper_band.name = "upper_band"
     lower_band.name = "lower_band"
 
-    return pd.DataFrame({
-        "middle_band": middle_band,
-        "upper_band": upper_band,
-        "lower_band": lower_band,
-        "rolling_geo_std": rolling_geo_std
-    })
+    return pd.DataFrame(
+        {
+            "middle_band": middle_band,
+            "upper_band": upper_band,
+            "lower_band": lower_band,
+            "rolling_geo_std": rolling_geo_std,
+        }
+    )
 
 
 # ------------------------------------------------------------------------------
 # Adaptive Squeeze indicator, using adaptive KC and BB
 # ------------------------------------------------------------------------------
 @jit(nopython=True)
-def _rolling_linreg_numba(
-    data: np.ndarray,
-    periods: np.ndarray
-) -> np.ndarray:
+def _rolling_linreg_numba(data: np.ndarray, periods: np.ndarray) -> np.ndarray:
     n = len(data)
     result = np.zeros(n, dtype=np.float64)
 
@@ -1033,7 +1012,7 @@ def _rolling_linreg_numba(
             continue
 
         # Extract window
-        y = data[start_idx:i+1]
+        y = data[start_idx : i + 1]
         x = np.arange(window_len, dtype=np.float64)
 
         # Calculate linear regression coefficients
@@ -1058,12 +1037,10 @@ def _rolling_linreg_numba(
             result[i] = 0.0
 
     return result
+
+
 @jit(nopython=True)
-def _rolling_highest_lowest(
-    high: np.ndarray,
-    low: np.ndarray,
-    periods: np.ndarray
-) -> tuple:
+def _rolling_highest_lowest(high: np.ndarray, low: np.ndarray, periods: np.ndarray) -> tuple:
     n = len(high)
     highest = np.zeros(n, dtype=np.float64)
     lowest = np.zeros(n, dtype=np.float64)
@@ -1076,25 +1053,24 @@ def _rolling_highest_lowest(
 
         start_idx = max(0, i - period + 1)
 
-        highest[i] = np.max(high[start_idx:i+1])
-        lowest[i] = np.min(low[start_idx:i+1])
+        highest[i] = np.max(high[start_idx : i + 1])
+        lowest[i] = np.min(low[start_idx : i + 1])
 
     return highest, lowest
+
+
 @jit(nopython=True)
-def _rolling_mean_variable(
-    data: np.ndarray,
-    periods: np.ndarray
-) -> np.ndarray:
+def _rolling_mean_variable(data: np.ndarray, periods: np.ndarray) -> np.ndarray:
     """
     Calculate rolling mean with variable periods.
-    
+
     Parameters
     ----------
     data : np.ndarray
         Input data
     periods : np.ndarray
         Rolling periods at each position
-        
+
     Returns
     -------
     np.ndarray
@@ -1111,22 +1087,20 @@ def _rolling_mean_variable(
             period = 20
 
         start_idx = max(0, i - period + 1)
-        result[i] = np.mean(data[start_idx:i+1])
+        result[i] = np.mean(data[start_idx : i + 1])
 
     return result
-def _calculate_squeeze_momentum(
-    df: pd.DataFrame,
-    source: pd.Series,
-    dominant_period: np.ndarray
-) -> pd.Series:
+
+
+def _calculate_squeeze_momentum(df: pd.DataFrame, source: pd.Series, dominant_period: np.ndarray) -> pd.Series:
     """
     Calculate squeeze momentum value using linear regression.
-    
+
     Formula:
-    val = linreg(source - avg(avg(highest(high, period), lowest(low, period)), 
-                              sma(close, period)), 
+    val = linreg(source - avg(avg(highest(high, period), lowest(low, period)),
+                              sma(close, period)),
                  period, 0)
-    
+
     Parameters
     ----------
     df : pd.DataFrame
@@ -1135,7 +1109,7 @@ def _calculate_squeeze_momentum(
         Source price series (typically typical price)
     dominant_period : np.ndarray
         Dominant period at each position
-        
+
     Returns
     -------
     pd.Series
@@ -1143,9 +1117,9 @@ def _calculate_squeeze_momentum(
 
     """
     # Convert to numpy arrays for Numba
-    high = df['High'].to_numpy(dtype=np.float64)
-    low = df['Low'].to_numpy(dtype=np.float64)
-    close = df['Close'].to_numpy(dtype=np.float64)
+    high = df["High"].to_numpy(dtype=np.float64)
+    low = df["Low"].to_numpy(dtype=np.float64)
+    close = df["Close"].to_numpy(dtype=np.float64)
     source_arr = source.to_numpy(dtype=np.float64)
 
     # Ensure dominant_period is the right type
@@ -1171,32 +1145,31 @@ def _calculate_squeeze_momentum(
     linreg_val = _rolling_linreg_numba(deviation, dominant_period)
 
     return pd.Series(linreg_val, index=df.index)
+
+
 def calculate_keltner_channel(df):
-    price = ((df['High'] + df['Low'] + df['Close']) / 3).to_numpy(np.float64)
-    dominant_period=ehler_dominant_cycle(price,cycpart=1.0,min_period=6,max_period=50)
+    price = ((df["High"] + df["Low"] + df["Close"]) / 3).to_numpy(np.float64)
+    dominant_period = ehler_dominant_cycle(price, cycpart=1.0, min_period=6, max_period=50)
     # --- Middle Band (adaptive Ehlers filter) ---
-    middle = adaptive_ehlers_filter(price=price, dominant_period=dominant_period, length_mult=0.5,momentum_ratio=0.7)
+    middle = adaptive_ehlers_filter(price=price, dominant_period=dominant_period, length_mult=0.5, momentum_ratio=0.7)
     atr = adaptive_atr_ehlers(df, dominant_period)
     upper = middle + (atr * 1.5)
     lower = middle - (atr * 1.5)
-    return pd.DataFrame({
-        "middle_band": middle,
-        "upper_band": upper,
-        "lower_band": lower,
-        "atr": atr
-    })
+    return pd.DataFrame({"middle_band": middle, "upper_band": upper, "lower_band": lower, "atr": atr})
+
+
 def squeeze_indicator(df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate the Squeeze Indicator with adaptive dominant cycle period.
-    
+
     The squeeze occurs when Bollinger Bands are inside Keltner Channels,
     indicating low volatility and potential breakout conditions.
-    
+
     Parameters
     ----------
     df : pd.DataFrame
         Price data with columns: 'High', 'Low', 'Close', 'Open'.
-        
+
     Returns
     -------
     pd.DataFrame
@@ -1210,15 +1183,10 @@ def squeeze_indicator(df: pd.DataFrame) -> pd.DataFrame:
 
     """
     # 1. Calculate typical price (HLC/3)
-    price = (df['High'] + df['Low'] + df['Close']) / 3
+    price = (df["High"] + df["Low"] + df["Close"]) / 3
 
     # 2. Get dominant cycle period using Ehlers method
-    dominant_period = ehler_dominant_cycle(
-        price.to_numpy(np.float64),
-        cycpart=1.0,
-        min_period=6,
-        max_period=50
-    )
+    dominant_period = ehler_dominant_cycle(price.to_numpy(np.float64), cycpart=1.0, min_period=6, max_period=50)
 
     # 3. Calculate Bollinger Bands (geometric method with 0.7 std dev)
     bbands = rolling_geometric_bollinger_bands(price, window=20, num_std=0.7)
@@ -1228,25 +1196,19 @@ def squeeze_indicator(df: pd.DataFrame) -> pd.DataFrame:
 
     # 5. Determine squeeze conditions
     # Squeeze ON: BBands compressed inside Keltner (low volatility)
-    sqz_on = (bbands['lower_band'] > kcdf['lower_band']) & \
-             (bbands['upper_band'] < kcdf['upper_band'])
+    sqz_on = (bbands["lower_band"] > kcdf["lower_band"]) & (bbands["upper_band"] < kcdf["upper_band"])
 
     # Squeeze OFF: BBands expanded outside Keltner (high volatility)
-    sqz_off = (bbands['lower_band'] < kcdf['lower_band']) & \
-              (bbands['upper_band'] > kcdf['upper_band'])
+    sqz_off = (bbands["lower_band"] < kcdf["lower_band"]) & (bbands["upper_band"] > kcdf["upper_band"])
 
     # 6. Calculate momentum value using linear regression
-    sqz_val = _calculate_squeeze_momentum(
-        df=df,
-        source=price,
-        dominant_period=dominant_period
-    )
+    sqz_val = _calculate_squeeze_momentum(df=df, source=price, dominant_period=dominant_period)
 
     # 7. Combine results into output DataFrame
     result = pd.DataFrame(index=df.index)
-    result['sqz_on'] = sqz_on
-    result['sqz_off'] = sqz_off
-    result['sqz_val'] = sqz_val
+    result["sqz_on"] = sqz_on
+    result["sqz_off"] = sqz_off
+    result["sqz_val"] = sqz_val
     # result['dominant_period'] = dominant_period
 
     # Include band values for reference/plotting
@@ -1259,16 +1221,16 @@ def squeeze_indicator(df: pd.DataFrame) -> pd.DataFrame:
 
     return result
 
+
 # ------------------------------------------------------------------------------
 # Adaptive Chandelier Exit
 # ------------------------------------------------------------------------------
-def calculate_chandelier_exit(df: pd.DataFrame,
-                            multiplier: float = 3.0):
-    high = df['High'].to_numpy(dtype=np.float64)
-    low = df['Low'].to_numpy(dtype=np.float64)
-    price = ((df['High'] + df['Low'] + df['Close']) / 3).to_numpy(np.float64)
+def calculate_chandelier_exit(df: pd.DataFrame, multiplier: float = 3.0):
+    high = df["High"].to_numpy(dtype=np.float64)
+    low = df["Low"].to_numpy(dtype=np.float64)
+    price = ((df["High"] + df["Low"] + df["Close"]) / 3).to_numpy(np.float64)
     period = ehler_dominant_cycle(price=price, cycpart=1.0, min_period=6, max_period=50)
-    atr, _, _ = adaptive_atr_ehlers(df, period/2)
+    atr, _, _ = adaptive_atr_ehlers(df, period / 2)
 
     # Highest high and lowest low
     highest_high, lowest_low = _rolling_highest_lowest(high, low, period)
@@ -1285,11 +1247,7 @@ def calculate_chandelier_exit(df: pd.DataFrame,
 # ------------------------------------------------------------------------------
 @jit(nopython=True)
 def _adaptive_smi_kernel(
-    high: np.ndarray,
-    low: np.ndarray,
-    close: np.ndarray,
-    smooth_period: np.ndarray,
-    cyc_part: float
+    high: np.ndarray, low: np.ndarray, close: np.ndarray, smooth_period: np.ndarray, cyc_part: float
 ) -> np.ndarray:
     r"""
     JIT-compiled kernel for adaptive SMI calculation.
@@ -1309,7 +1267,7 @@ def _adaptive_smi_kernel(
     Key Differences from Stochastic:
     - Range: -100 to +100 (vs 0 to 100 for Stochastic)
     - Reference: Midpoint of HH-LL range (vs LL for Stochastic)
-    - Interpretation: 
+    - Interpretation:
         * Positive values (>0): Close above midpoint (bullish momentum)
         * Negative values (<0): Close below midpoint (bearish momentum)
         * Zero: Close at exact midpoint (neutral)
@@ -1385,7 +1343,7 @@ def adaptive_smi(
     """
     Calculate adaptive Stochastic Momentum Index using Ehlers dominant cycle.
 
-    The SMI measures where price closes relative to the midpoint of the high-low 
+    The SMI measures where price closes relative to the midpoint of the high-low
     range over an adaptive lookback period. Unlike traditional stochastic (0-100),
     SMI ranges from -100 to +100, providing clearer momentum direction signals.
 
@@ -1409,10 +1367,10 @@ def adaptive_smi(
     --------
     >>> # Half-cycle SMI (standard)
     >>> df['SMI'] = adaptive_smi(df, cyc_part=0.5)
-    >>> 
+    >>>
     >>> # Full-cycle SMI (smoother, slower)
     >>> df['SMI_Full'] = adaptive_smi(df, cyc_part=1.0)
-    >>> 
+    >>>
     >>> # Quarter-cycle SMI (more responsive)
     >>> df['SMI_Fast'] = adaptive_smi(df, cyc_part=0.25)
 
@@ -1426,18 +1384,18 @@ def adaptive_smi(
 
     """
     # Validate required columns
-    required_cols = ['High', 'Low', 'Close']
+    required_cols = ["High", "Low", "Close"]
     missing = [col for col in required_cols if col not in df.columns]
     if missing:
         raise ValueError(f"DataFrame missing required columns: {missing}")
 
     # Calculate typical price for cycle detection (Ehlers convention)
-    price = ((df['High'] + df['Low'] + df['Close']) / 3).to_numpy(np.float64)
+    price = ((df["High"] + df["Low"] + df["Close"]) / 3).to_numpy(np.float64)
 
     # Extract OHLC arrays
-    high = df['High'].to_numpy(np.float64)
-    low = df['Low'].to_numpy(np.float64)
-    close = df['Close'].to_numpy(np.float64)
+    high = df["High"].to_numpy(np.float64)
+    low = df["Low"].to_numpy(np.float64)
+    close = df["Close"].to_numpy(np.float64)
 
     # Get dominant cycle period (returns numpy array)
     # NOTE: Assumes ehler_dominant_cycle function exists in scope
@@ -1445,17 +1403,14 @@ def adaptive_smi(
         price,
         cycpart=1.0,  # Use full cycle for period measurement
         min_period=min_period,
-        max_period=max_period
+        max_period=max_period,
     )
 
     # Calculate adaptive SMI
     smi_values = _adaptive_smi_kernel(high, low, close, smooth_period, cyc_part)
 
     # Return as Series with original index
-    return pd.Series(smi_values, index=df.index, name='AdaptiveSMI')
-
-
-
+    return pd.Series(smi_values, index=df.index, name="AdaptiveSMI")
 
 
 # Transform
@@ -1475,7 +1430,7 @@ def fisher_transform(series: pd.Series, clip_value: float = 0.999) -> pd.Series:
     # Equivalent to arctanh(x) but explicit for clarity
     fisher = 0.5 * np.log((1.0 + clipped) / (1.0 - clipped))
 
-    return pd.Series(fisher, index=series.index, name=f'Fisher_{series.name}' if series.name else 'Fisher')
+    return pd.Series(fisher, index=series.index, name=f"Fisher_{series.name}" if series.name else "Fisher")
 
 
 def cube_root_transform(series: pd.Series, preserve_sign: bool = True) -> pd.Series:
@@ -1485,14 +1440,16 @@ def cube_root_transform(series: pd.Series, preserve_sign: bool = True) -> pd.Ser
     if preserve_sign:
         # Sign-preserving cube root: sign(x) * |x|^(1/3)
         # This maintains negative values and monotonicity
-        result = np.sign(series) * np.power(np.abs(series), 1/3)
+        result = np.sign(series) * np.power(np.abs(series), 1 / 3)
     else:
         # Standard cube root (requires non-negative values)
         if (series < 0).any():
-            raise ValueError("Standard cube root requires non-negative values. Use preserve_sign=True for negative values.")
-        result = np.power(series, 1/3)
+            raise ValueError(
+                "Standard cube root requires non-negative values. Use preserve_sign=True for negative values."
+            )
+        result = np.power(series, 1 / 3)
 
-    return pd.Series(result, index=series.index, name=f'CubeRoot_{series.name}' if series.name else 'CubeRoot')
+    return pd.Series(result, index=series.index, name=f"CubeRoot_{series.name}" if series.name else "CubeRoot")
 
 
 def inverse_fisher_transform(series: pd.Series, normalize: bool = True) -> pd.Series:
@@ -1511,4 +1468,4 @@ def inverse_fisher_transform(series: pd.Series, normalize: bool = True) -> pd.Se
     # Using np.tanh for numerical stability (handles overflow in exp)
     ift = np.tanh(series)
 
-    return pd.Series(ift, index=series.index, name=f'IFT_{series.name}' if series.name else 'IFT')
+    return pd.Series(ift, index=series.index, name=f"IFT_{series.name}" if series.name else "IFT")

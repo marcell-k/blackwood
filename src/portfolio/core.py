@@ -38,10 +38,7 @@ class PortfolioBacktester:
 
     @staticmethod
     def _to_utc_day(ts: pd.Timestamp) -> pd.Timestamp:
-        if ts.tzinfo is None:
-            ts_utc = ts.tz_localize("UTC")
-        else:
-            ts_utc = ts.tz_convert("UTC")
+        ts_utc = ts.tz_localize("UTC") if ts.tz_info is None else ts.tz_convert("UTC")
         return ts_utc.normalize()
 
     @staticmethod
@@ -578,7 +575,7 @@ class PortfolioBacktester:
         all_event_dates = sorted(all_rebalance_set | allocator_effective_set)
         if all_event_dates:
             event_bar_positions = idx.get_indexer(pd.DatetimeIndex(all_event_dates))
-            events = list(zip(event_bar_positions.tolist(), all_event_dates))
+            events = list(zip(event_bar_positions.tolist(), all_event_dates, strict=False))
         else:
             events = []
 
@@ -700,10 +697,7 @@ class PortfolioBacktester:
         else:
             # ===== STATEFUL PATH: numpy-optimized per-bar loop (risk rules) =====
             # Pre-compute UTC days to avoid per-bar timezone work
-            if idx.tz is not None:
-                utc_days = idx.tz_convert("UTC").normalize()
-            else:
-                utc_days = idx.tz_localize("UTC").normalize()
+            utc_days = idx.tz_convert("UTC").normalize() if idx.tz is not None else idx.tz_localize("UTC").normalize()
 
             risk_state = {
                 "peak_equity": float(initial_capital),
@@ -1006,7 +1000,7 @@ class PortfolioMetrics:
         print(f"\n{weights_df.round(4).to_string()}")
 
     def print_all_allocation_history(self):
-        for strategy_name in self.all_results.keys():
+        for strategy_name in self.all_results:
             self.print_allocation_history(strategy_name)
 
     def get_portfolio_returns(self) -> dict[str, pd.Series]:

@@ -89,10 +89,7 @@ def compute_strategy_state_features_with_history(
     """
     Compute state features for y_current using optional prior history.
     """
-    if y_history is not None and not y_history.empty:
-        combined = pd.concat([y_history, y_current], axis=0)
-    else:
-        combined = y_current
+    combined = pd.concat([y_history, y_current], axis=0) if y_history is not None and not y_history.empty else y_current
 
     combined_feats = compute_strategy_state_features(
         combined,

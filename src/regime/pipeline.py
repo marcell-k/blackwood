@@ -1,29 +1,32 @@
-# Third-party imports - Data & numerical
 import numpy as np
 import pandas as pd
 from hmmlearn.hmm import GaussianHMM
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix
-
-# Third-party imports - Statistics
 from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-
-# Local imports
 from src.config import RANDOM_STATE
 from src.regime.features import RegimeFeatureEngineer
 
 # Feature sets
-GMM_FEATURES = [
-    'atr_40_4h', 'realized_vol_20_4h', 'atr_40_1h',
-    'atr_14_15min', 'realized_vol_20_15min'
-]
+GMM_FEATURES = ["atr_40_4h", "realized_vol_20_4h", "atr_40_1h", "atr_14_15min", "realized_vol_20_15min"]
 RF_FEATURES = [
-    'vol_of_vol_20_15min', 'vol_of_vol_40_15min', 'adp_atr_15min',
-    'atr_5_1h', 'atr_14_1h', 'atr_21_1h', 'atr_40_1h',
-    'realized_vol_20_1h', 'vol_of_vol_20_1h', 'vol_of_vol_40_1h',
-    'adp_atr_1h', 'vol_of_vol_20_4h', 'vol_of_vol_40_4h', 'adp_atr_4h'
+    "vol_of_vol_20_15min",
+    "vol_of_vol_40_15min",
+    "adp_atr_15min",
+    "atr_5_1h",
+    "atr_14_1h",
+    "atr_21_1h",
+    "atr_40_1h",
+    "realized_vol_20_1h",
+    "vol_of_vol_20_1h",
+    "vol_of_vol_40_1h",
+    "adp_atr_1h",
+    "vol_of_vol_20_4h",
+    "vol_of_vol_40_4h",
+    "adp_atr_4h",
 ]
+
 
 class RegimeDetector:
     def __init__(
@@ -32,7 +35,7 @@ class RegimeDetector:
         rf_features=RF_FEATURES,
         n_components: int = 3,
         confidence_threshold: float = 0.6,
-        random_state: int = RANDOM_STATE
+        random_state: int = RANDOM_STATE,
     ):
         self.gmm_features = gmm_features
         self.rf_features = rf_features
@@ -42,28 +45,17 @@ class RegimeDetector:
 
         self.scaler = StandardScaler()
         self.gmm = GaussianMixture(
-            n_components=n_components,
-            covariance_type="full",
-            n_init=10,
-            random_state=random_state
+            n_components=n_components, covariance_type="full", n_init=10, random_state=random_state
         )
         self.hmm = GaussianHMM(
-            n_components=n_components,
-            covariance_type="diag",
-            n_iter=2000,
-            tol=1e-4,
-            random_state=random_state
+            n_components=n_components, covariance_type="diag", n_iter=2000, tol=1e-4, random_state=random_state
         )
         self.encoder = OneHotEncoder(sparse_output=False)
         self.rf = RandomForestClassifier(
-            n_estimators=50,
-            max_depth=3,
-            min_samples_leaf=200,
-            max_features="sqrt",
-            random_state=random_state
+            n_estimators=50, max_depth=3, min_samples_leaf=200, max_features="sqrt", random_state=random_state
         )
 
-    def fit(self, X: pd.DataFrame) -> 'RegimeDetector':
+    def fit(self, X: pd.DataFrame) -> "RegimeDetector":
         # GMM: soft cluster assignments
         gmm_data = X[self.gmm_features].to_numpy()
         gmm_scaled = self.scaler.fit_transform(gmm_data)
@@ -80,9 +72,7 @@ class RegimeDetector:
         regime_ohe = self.encoder.fit_transform(current_regimes.reshape(-1, 1))
 
         # Precompute one-hot bases for all possible regimes
-        self.ohe_bases = self.encoder.transform(
-            np.arange(self.n_components).reshape(-1, 1)
-        )
+        self.ohe_bases = self.encoder.transform(np.arange(self.n_components).reshape(-1, 1))
 
         rf_data = X[self.rf_features].to_numpy()[:-1]
         transition_X = np.hstack([regime_ohe, rf_data])
@@ -109,16 +99,12 @@ class RegimeDetector:
         result["regime"] = self._train_forward_regimes.values.astype(int)
         return result
 
-    def forward_predict_regimes(
-        self,
-        X: pd.DataFrame,
-        use_confidence_gating: bool = False
-    ) -> pd.Series:
+    def forward_predict_regimes(self, X: pd.DataFrame, use_confidence_gating: bool = False) -> pd.Series:
         """
         Causally predict regimes for new (out-of-sample) data, continuing from the last training regime.
         If use_confidence_gating=True, stays in current regime when GMM posterior is low.
         """
-        if not hasattr(self, '_last_regime'):
+        if not hasattr(self, "_last_regime"):
             raise RuntimeError("Detector must be fitted first.")
         if X.empty:
             return pd.Series(dtype=int, index=X.index)
@@ -137,11 +123,11 @@ class RegimeDetector:
             confidences = np.full(n_rows, 1.0)
 
         # Precompute RF predictions for every row and every possible current regime
-        ohe_all = np.tile(self.ohe_bases, (n_rows, 1))          # (n_rows * n_comp, n_comp)
-        rf_all = np.repeat(rf_feats, n_comp, axis=0)            # (n_rows * n_comp, n_rf)
+        ohe_all = np.tile(self.ohe_bases, (n_rows, 1))  # (n_rows * n_comp, n_comp)
+        rf_all = np.repeat(rf_feats, n_comp, axis=0)  # (n_rows * n_comp, n_rf)
         input_all = np.hstack([ohe_all, rf_all])
         all_predictions = self.rf.predict(input_all)
-        next_pred = all_predictions.reshape(n_rows, n_comp)     # next_pred[i, current]
+        next_pred = all_predictions.reshape(n_rows, n_comp)  # next_pred[i, current]
 
         # Sequential pass (lightweight)
         regimes = np.empty(n_rows, dtype=int)
@@ -156,12 +142,7 @@ class RegimeDetector:
 
         return pd.Series(regimes, index=X.index)
 
-    def predict_next_regime(
-        self,
-        current_regime: int,
-        rf_features: np.ndarray,
-        regime_prob: float
-    ) -> int:
+    def predict_next_regime(self, current_regime: int, rf_features: np.ndarray, regime_prob: float) -> int:
         """Single-step prediction with confidence gating (mirrors forward_predict_regimes logic)."""
         if regime_prob < self.confidence_threshold:
             return current_regime
@@ -183,15 +164,14 @@ class RegimeDetector:
                 print(probs)
 
 
-    
 def fit_and_label_regimes(
     train: pd.DataFrame,
     oos: pd.DataFrame,
-    timeframes: list[str] = ['15min', '1h', '4h'],
+    timeframes: list[str] | None = None,
     clip_quantiles: tuple[float, float] = (0.01, 0.99),
     features_to_exclude: list[str] | None = None,
     verbose: bool = True,
-    **detector_kwargs
+    **detector_kwargs,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Fit regime detector on train data and label both train and OOS with forward regimes.
@@ -203,6 +183,9 @@ def fit_and_label_regimes(
     verbose : bool
         If True, print diagnostics and show regime plots
     """
+    if timeframes is None:
+        timeframes = ["15min", "1h", "4h"]
+
     # Feature engineering
     X_train = RegimeFeatureEngineer(train, timeframes=timeframes).run()
     X_oos = RegimeFeatureEngineer(oos, timeframes=timeframes).run()
@@ -233,7 +216,7 @@ def fit_and_label_regimes(
     oos_regimes = detector.forward_predict_regimes(X_oos_clipped)
 
     oos_labeled = oos.copy()
-    oos_labeled['regime'] = oos_regimes.astype(int)
+    oos_labeled["regime"] = oos_regimes.astype(int)
 
     if verbose:
         from src.regime.analysis import analyze_regime_statistics
@@ -243,12 +226,14 @@ def fit_and_label_regimes(
         print(f"\nTrain regime distribution:\n{train_labeled['regime'].value_counts().sort_index()}")
         print(f"\nOOS regime distribution:\n{oos_labeled['regime'].value_counts().sort_index()}")
 
-        plot_regime_candlesticks(train_labeled[-4000:], mark_transitions=False, per_bar_shading=True,
-                                 use_session_hours=False)
-        plot_regime_candlesticks(oos_labeled[-4000:], mark_transitions=False, per_bar_shading=True,
-                                 use_session_hours=False)
+        plot_regime_candlesticks(
+            train_labeled[-4000:], mark_transitions=False, per_bar_shading=True, use_session_hours=False
+        )
+        plot_regime_candlesticks(
+            oos_labeled[-4000:], mark_transitions=False, per_bar_shading=True, use_session_hours=False
+        )
 
-        n_components = detector_kwargs.get('n_components', 3)
+        n_components = detector_kwargs.get("n_components", 3)
         regime_directions = {i: 1 for i in range(n_components)}
         analyze_regime_statistics(train_labeled, regime_directions=regime_directions)
         analyze_regime_statistics(oos_labeled, regime_directions=regime_directions)

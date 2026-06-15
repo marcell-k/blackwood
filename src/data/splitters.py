@@ -26,25 +26,16 @@ def split_train_test_live(
     if df.empty:
         return df.copy(), df.copy(), df.copy()
 
-    if date_index_col is None:
-        idx = pd.to_datetime(df.index)
-    else:
-        idx = pd.to_datetime(df[date_index_col])
+    idx = pd.to_datetime(df.index) if date_index_col is None else pd.to_datetime(df[date_index_col])
 
     idx = pd.DatetimeIndex(idx)
     train_end_ts = pd.Timestamp(train_end)
     test_end_ts = pd.Timestamp(test_end)
 
     if idx.tz is not None:
-        if train_end_ts.tz is None:
-            train_end_ts = train_end_ts.tz_localize(idx.tz)
-        else:
-            train_end_ts = train_end_ts.tz_convert(idx.tz)
+        train_end_ts = train_end_ts.tz_localize(idx.tz) if train_end_ts.tz is None else train_end_ts.tz_convert(idx.tz)
 
-        if test_end_ts.tz is None:
-            test_end_ts = test_end_ts.tz_localize(idx.tz)
-        else:
-            test_end_ts = test_end_ts.tz_convert(idx.tz)
+        test_end_ts = test_end_ts.tz_localize(idx.tz) if test_end_ts.tz is None else test_end_ts.tz_convert(idx.tz)
     else:
         train_end_ts = train_end_ts.tz_localize(None) if train_end_ts.tz is not None else train_end_ts
         test_end_ts = test_end_ts.tz_localize(None) if test_end_ts.tz is not None else test_end_ts
@@ -99,10 +90,7 @@ class MonthWalkForwardSplitter:
     def split(
         self, df: pd.DataFrame, *, date_index_col: str | None = None
     ) -> tuple[list[pd.DataFrame], list[pd.DataFrame], pd.DataFrame]:
-        if date_index_col is None:
-            idx = pd.to_datetime(df.index)
-        else:
-            idx = pd.to_datetime(df[date_index_col])
+        idx = pd.to_datetime(df.index) if date_index_col is None else pd.to_datetime(df[date_index_col])
         idx = self._ensure_tz(pd.DatetimeIndex(idx))
 
         g, gmin, gmax = self._global_month(idx)
@@ -153,7 +141,7 @@ class MonthWalkForwardSplitter:
     @staticmethod
     def print_train_test_periods(train_dfs, test_dfs) -> None:
         print(f"Number of train-test splits: {len(train_dfs)}")
-        for i, (tr, te) in enumerate(zip(train_dfs, test_dfs), 1):
+        for i, (tr, te) in enumerate(zip(train_dfs, test_dfs, strict=True), 1):
             if len(tr) == 0 or len(te) == 0:
                 print(f"Set {i}: (empty split)")
                 continue
@@ -166,10 +154,7 @@ class MonthWalkForwardSplitter:
     def get_latest_train(
         self, df: pd.DataFrame, *, date_index_col: str | None = None, mode: str = "last_is_window"
     ) -> pd.DataFrame:
-        if date_index_col is None:
-            idx = pd.to_datetime(df.index)
-        else:
-            idx = pd.to_datetime(df[date_index_col])
+        idx = pd.to_datetime(df.index) if date_index_col is None else pd.to_datetime(df[date_index_col])
         idx = self._ensure_tz(pd.DatetimeIndex(idx))
         g, gmin, gmax = self._global_month(idx)
 
@@ -519,7 +504,7 @@ class CPCVSplitter:
                 )
             )
 
-        for p, (path_id, folds) in enumerate(list(paths.items())[:max_paths_to_show]):
+        for p, (_path_id, folds) in enumerate(list(paths.items())[:max_paths_to_show]):
             test_periods = []
             for _, test_df in folds:
                 test_idx = self._resolve_index(test_df)
@@ -561,10 +546,7 @@ class CPCVSplitter:
                     purge_after = test_end + purge_delta
                     add_segment(p, test_end, purge_after, colors["Purge"], "Purge", dash="dash", width=4)
                 if self.embargo_weeks > 0 and not is_next_adjacent:
-                    if self.purged_weeks > 0:
-                        embargo_end = purge_after + embargo_delta
-                    else:
-                        embargo_end = test_end + embargo_delta
+                    embargo_end = purge_after + embargo_delta if self.purged_weeks > 0 else test_end + embargo_delta
                     add_segment(
                         p,
                         max(test_end, purge_after if self.purged_weeks > 0 else test_end),

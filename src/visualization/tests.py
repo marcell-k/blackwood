@@ -116,7 +116,7 @@ class PermutationPlotter:
         self,
         fold_results: list[dict[str, Any]],
         fold_idx: int = 0,
-        metrics: list[str] = ["Sharpe Ratio", "Profit Factor"],
+        metrics: list[str] = None,
         width: int = 1000,
         height: int = 300,
     ) -> None:
@@ -133,6 +133,8 @@ class PermutationPlotter:
             List of metrics to plot (must be 2 metrics)
 
         """
+        if metrics is None:
+            metrics = ["Sharpe Ratio", "Profit Factor"]
         if fold_idx >= len(fold_results):
             print(f"Error: fold_idx {fold_idx} exceeds available folds {len(fold_results)}")
             return
@@ -386,7 +388,7 @@ def plot_cross_validation_folds(
     if len(fold_p_values) != len(cleaned):
         raise ValueError("fold_p_values must have the same length as fold_dfs.")
 
-    for i, (df, pval) in enumerate(zip(cleaned, fold_p_values)):
+    for i, (df, pval) in enumerate(zip(cleaned, fold_p_values, strict=True)):
         if df.empty:
             continue
         x0, x1 = df.index.min(), df.index.max()

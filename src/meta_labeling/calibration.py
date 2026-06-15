@@ -1,6 +1,5 @@
-# Standard library imports
+from __future__ import annotations
 
-# Third-party imports
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
@@ -140,7 +139,7 @@ class ProbabilityCalibrator:
 
             feature_names = ["original"] + list(self.base_calibrators.keys())
             self._log("\nLearned meta-model weights:")
-            for name, w in zip(feature_names, self.meta_model.coef_[0]):
+            for name, w in zip(feature_names, self.meta_model.coef_[0], strict=True):
                 self._log(f"  {name:<12}: {w:+.4f}")
             self._log(f"  Intercept: {self.meta_model.intercept_[0]:+.4f}")
 

@@ -335,7 +335,7 @@ class RMTCorrelationProcessor:
         labels = fcluster(Z, best_k, criterion="maxclust")
 
         clusters = {}
-        for label, name in zip(labels, feature_names):
+        for label, name in zip(labels, feature_names, strict=True):
             clusters.setdefault(label, []).append(name)
 
         self.clusters = {k: v for k, v in clusters.items() if len(v) >= min_cluster_size}
@@ -473,10 +473,21 @@ class RMTCorrelationProcessor:
         sample_weights: pd.Series | None = None,
         config: MDAConfig | None = None,
     ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
-        r"""
-        Mean Decrease Accuracy (MDA) - Book Snippet 6.3.
+        """
+        Calculate the Mean Decrease Accuracy (MDA) for feature importance.
 
-        $$\text{MDA}_j = \mathbb{E}_{\text{folds}}\left[\frac{S_{\text{baseline}} - S_{\text{perm}_j}}{|S_{\text{baseline}}|}\right]$$
+        This implements Snippet 6.3 from Marcos López de Prado's "Advances in
+        Financial Machine Learning". It calculates the expected drop in model
+        performance when a specific feature's values are randomly permuted.
+
+        Formula:
+            MDA_j = E [ (S_baseline - S_perm_j) / |S_baseline| ]
+
+        Where:
+            - MDA_j      : The importance score for feature `j`.
+            - E          : Expectation (average) across all cross-validation folds.
+            - S_baseline : The out-of-sample score of the baseline model.
+            - S_perm_j   : The out-of-sample score after shuffling feature `j`.
         """
         config = config or MDAConfig()
         self._validate_mda_config(config)
@@ -1197,7 +1208,7 @@ class PCAEigenvalueAnalysis:
         style = DEFAULT_STYLE
         variance_threshold = variance_threshold or self.variance_threshold
         eigenvalues = eigenvalues if eigenvalues is not None else pca_analysis["eigenvalues"]
-        variance_explained = pca_analysis["variance_explained"]
+        # variance_explained = pca_analysis["variance_explained"]
         cumulative_variance = pca_analysis["cumulative_variance"]
         kaiser_threshold = pca_analysis["kaiser_threshold"]
         n_components_threshold = pca_analysis["n_components_threshold"]
@@ -1400,8 +1411,8 @@ class PCAEigenvalueAnalysis:
     def find_optimal_pca_thresholds(
         self,
         features: pd.DataFrame,
-        variance_range: np.ndarray = np.linspace(0.01, 0.10, 10),
-        loading_range: np.ndarray = np.linspace(0.1, 0.5, 9),
+        variance_range: np.ndarray,
+        loading_range: np.ndarray,
         target: pd.Series | None = None,
         verbose: bool = True,
         random_state: int = RANDOM_STATE,
@@ -1412,6 +1423,9 @@ class PCAEigenvalueAnalysis:
         Superior to cross-validation approach as it optimizes information efficiency
         without overfitting to specific target (unless target provided).
         """
+        loading_range = np.linspace(0.1, 0.5, 9)
+        variance_range = np.linspace(0.01, 0.10, 10)
+
         # Initialize PCA analyzer
         pca_analyzer = PCAEigenvalueAnalysis(random_state=random_state)
         # Compute PCA once (vectorized)
@@ -1526,7 +1540,7 @@ class PCAEigenvalueAnalysis:
             axes[0, 0].set_xticks(range(len(pivot_efficiency.columns)))
             axes[0, 0].set_xticklabels([f"{v:.2f}" for v in pivot_efficiency.columns], rotation=45)
             axes[0, 0].set_yticks(range(len(pivot_efficiency.index)))
-            axes[0, 0].set_yticklabels([f"{l:.2f}" for l in pivot_efficiency.index])
+            axes[0, 0].set_yticklabels([f"{i:.2f}" for i in pivot_efficiency.index])
             axes[0, 0].set_xlabel("Variance Threshold (PC Importance)", fontsize=11)
             axes[0, 0].set_ylabel("Loading Threshold", fontsize=11)
             axes[0, 0].set_title("Efficiency Score Heatmap", fontsize=12, fontweight="bold")
@@ -1556,7 +1570,7 @@ class PCAEigenvalueAnalysis:
             axes[0, 1].set_xticks(range(len(pivot_features.columns)))
             axes[0, 1].set_xticklabels([f"{v:.2f}" for v in pivot_features.columns], rotation=45)
             axes[0, 1].set_yticks(range(len(pivot_features.index)))
-            axes[0, 1].set_yticklabels([f"{l:.2f}" for l in pivot_features.index])
+            axes[0, 1].set_yticklabels([f"{i:.2f}" for i in pivot_features.index])
             axes[0, 1].set_xlabel("Variance Threshold (PC Importance)", fontsize=11)
             axes[0, 1].set_ylabel("Loading Threshold", fontsize=11)
             axes[0, 1].set_title("Feature Count Heatmap", fontsize=12, fontweight="bold")

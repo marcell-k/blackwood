@@ -73,10 +73,7 @@ def _clean_returns(returns: pd.DataFrame) -> np.ndarray:
 
     # Prefer dropping NaNs to avoid biasing correlations toward 0.
     r_drop = r.dropna(how="any")
-    if len(r_drop) >= max(20, int(0.5 * len(r))):
-        r = r_drop
-    else:
-        r = r.fillna(0.0)
+    r = r_drop if len(r_drop) >= max(20, int(0.5 * len(r))) else r.fillna(0.0)
 
     return r.to_numpy(dtype=float)
 

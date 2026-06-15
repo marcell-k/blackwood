@@ -552,7 +552,8 @@ class TradingSequenceAnalyzer:
         ax.set_xlabel("Consecutive Losing Trades (RR < 0)", fontweight="bold")
         ax.set_ylabel("Frequency", fontweight="bold")
         ax.set_title(
-            f"Losing Streak Distribution\nTotal Streaks: {self.streak_stats['total_losing_streaks']} | Longest: {max_streak}",
+            f"Losing Streak Distribution\nTotal Streaks: {self.streak_stats['total_losing_streaks']} | "
+            f"Longest: {max_streak}",
             fontweight="bold",
             pad=20,
         )
@@ -1053,7 +1054,7 @@ class TradingPerformanceAnalyzer:
             )
 
         fig, ax = plt.subplots(figsize=(12, 6))
-        accent_rgba = (*[int(self.style.accent2[l : l + 2], 16) / 255 for l in (1, 3, 5)], 0.4)
+        accent_rgba = (*[int(self.style.accent2[i : i + 2], 16) / 255 for i in (1, 3, 5)], 0.4)
 
         ax.fill_between(drawdown.index, 0, drawdown.values, color=accent_rgba)
         ax.plot(drawdown.index, drawdown.values, color=self.style.accent2, linewidth=2)
@@ -1134,11 +1135,11 @@ class TradingDashboard:
             for i in range(self.n_strategies)
         ]
 
-        self._metrics_cache = dict(zip(self.strategy_names, metrics_list))
+        self._metrics_cache = dict(zip(self.strategy_names, metrics_list, strict=True))
 
         equity_dict = {
             name: df["Equity"]
-            for name, df in zip(self.strategy_names, self.equity_data)
+            for name, df in zip(self.strategy_names, self.equity_data, strict=True)
             if not df.empty and "Equity" in df.columns
         }
 

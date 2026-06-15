@@ -262,7 +262,7 @@ def visualize_chart(
         {"middle": "rgba(255, 99, 71, 0.8)", "bands": "rgba(255, 99, 71, 0.6)", "fill": "rgba(255, 99, 71, 0.15)"},
     ]
 
-    for idx, (bb_data, bb_name) in enumerate(zip(bb_plot_data_list, bbands_names)):
+    for idx, (bb_data, bb_name) in enumerate(zip(bb_plot_data_list, bbands_names, strict=True)):
         colors = band_colors[idx % len(band_colors)]
 
         # Middle band
@@ -363,10 +363,10 @@ def visualize_chart(
 
         if has_pivot_high:
             if "zigzag" in plot_data.columns:
-                pivot_high_mask = plot_data["pivot_high"] == True
+                pivot_high_mask = plot_data["pivot_high"]
                 pivot_highs_data = plot_data.loc[pivot_high_mask, "zigzag"].dropna()
             else:
-                pivot_high_mask = plot_data["pivot_high"] == True
+                pivot_high_mask = plot_data["pivot_high"]
                 pivot_highs_data = plot_data.loc[pivot_high_mask, "High"]
 
             if not pivot_highs_data.empty:
@@ -391,10 +391,10 @@ def visualize_chart(
 
         if has_pivot_low:
             if "zigzag" in plot_data.columns:
-                pivot_low_mask = plot_data["pivot_low"] == True
+                pivot_low_mask = plot_data["pivot_low"]
                 pivot_lows_data = plot_data.loc[pivot_low_mask, "zigzag"].dropna()
             else:
-                pivot_low_mask = plot_data["pivot_low"] == True
+                pivot_low_mask = plot_data["pivot_low"]
                 pivot_lows_data = plot_data.loc[pivot_low_mask, "Low"]
 
             if not pivot_lows_data.empty:
@@ -517,10 +517,7 @@ def visualize_chart(
         ):
             fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5, row=group_idx, col=1)
 
-        if len(group) == 1:
-            yaxis_label = group[0]
-        else:
-            yaxis_label = " & ".join(group)
+        yaxis_label = group[0] if len(group) == 1 else " & ".join(group)
         fig.update_yaxes(title_text=yaxis_label, row=group_idx, col=1)
 
     # 12. Support/Resistance Zones as rectangles
@@ -744,7 +741,7 @@ def visualize_chart_date_range(
         },
     ]
 
-    for idx, (bb_data, bb_name) in enumerate(zip(bb_plot_data_list, bbands_names)):
+    for idx, (bb_data, bb_name) in enumerate(zip(bb_plot_data_list, bbands_names, strict=True)):
         colors = band_colors[idx % len(band_colors)]
 
         fig.add_trace(

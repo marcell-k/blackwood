@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 import os
 import re
@@ -411,7 +413,7 @@ class DualFilterSelector:
             distances = distances_list[0].astype(np.float32)
             fold_performances = []
 
-            for fold_sharpes, valid_mask in zip(fold_arrays, valid_masks):
+            for fold_sharpes, valid_mask in zip(fold_arrays, valid_masks, strict=True):
                 if valid_mask.sum() == 0:
                     continue
                 neighbor_valid = valid_mask[neighbor_idxs]
@@ -603,7 +605,7 @@ class PnLBootstrapValidator:
                     block_length=block_length,
                     seed=seed,
                 )
-                for params, full_row, seed in zip(param_dicts, full_row_dicts, worker_seed_ints)
+                for params, full_row, seed in zip(param_dicts, full_row_dicts, worker_seed_ints, strict=True)
             ]
         else:
             n_workers = self.config.n_jobs if self.config.n_jobs > 0 else -1
@@ -619,7 +621,7 @@ class PnLBootstrapValidator:
                     n_iterations=n_iterations,
                     block_length=block_length,
                 )
-                for params, full_row, seed in zip(param_dicts, full_row_dicts, worker_seed_ints)
+                for params, full_row, seed in zip(param_dicts, full_row_dicts, worker_seed_ints, strict=True)
             )
         return pd.DataFrame(results)
 
@@ -707,7 +709,7 @@ class PnLBootstrapValidator:
 
         resampled = np.empty(n_samples, dtype=data.dtype)
         idx = 0
-        for start, block_len in zip(starts, lengths):
+        for start, block_len in zip(starts, lengths, strict=True):
             if idx >= n_samples:
                 break
             actual = min(int(block_len), n_obs - start, n_samples - idx)
@@ -817,8 +819,10 @@ def _cpcv_path_worker(
         tqdm(folds, desc=f"Path {path_id}", unit="fold", position=1, leave=False)
     ):
 
-        def bt_func_train(**params):
-            return runner.run(train_df, strategy_class, params)
+        def bt_func_train(df=train_df, **params):
+            return runner.run(df, strategy_class, params)
+
+        optimizer = OptunaOptimizer(bt_func=bt_func_train)
 
         optimizer = OptunaOptimizer(bt_func=bt_func_train)
         optimizer.optimize(
@@ -1211,7 +1215,7 @@ class ParameterStabilityPipeline:
             print("\nData Split (Temporal Integrity):")
             print(f" Train:   {self._train_df.index.min()} → {self._train_df.index.max()} ({len(self._train_df)} bars)")
             print(
-                f" Holdout: {self._holdout_df.index.min()} → {self._holdout_df.index.max()} ({len(self._holdout_df)} bars)"
+                f" Holdout: {self._holdout_df.index.min()} → {self._holdout_df.index.max()} ({len(self._holdout_df)} bars)"  # noqa: E501
             )
 
         phases = [
@@ -1296,7 +1300,7 @@ class ParameterStabilityPipeline:
                 path_seed=seed,
                 constraint=self.constraints,
             )
-            for (path_id, folds), seed in zip(cpcv_paths.items(), path_seed_ints)
+            for (path_id, folds), seed in zip(cpcv_paths.items(), path_seed_ints, strict=False)
         )
 
         # Merge path results
@@ -1536,7 +1540,7 @@ class ParameterStabilityPipeline:
                 counts.append(len(data))
         colors = [sty.accent1, sty.accent2, sty.accent3, sty.accent4, sty.accent5]
         bars = ax.bar(stage_names, counts, color=colors, alpha=0.8)
-        for bar, count in zip(bars, counts):
+        for bar, count in zip(bars, counts, strict=True):
             ax.text(
                 bar.get_x() + bar.get_width() / 2,
                 bar.get_height(),
@@ -1643,7 +1647,7 @@ class ParameterStabilityPipeline:
         ax3.set_xlabel("Composite Score", fontsize=11)
         ax3.set_title("Top 10 Parameter Sets", fontsize=12, fontweight="bold")
         ax3.grid(True, alpha=0.3, axis="x")
-        for pos, score in zip(y_pos, top10["composite_score"]):
+        for pos, score in zip(y_pos, top10["composite_score"], strict=True):
             ax3.text(score, pos, f" {score:.3f}", va="center", fontsize=9)
 
         fig.suptitle("Parameter Stability Pipeline - Final Dashboard", fontsize=16, fontweight="bold", y=0.98)

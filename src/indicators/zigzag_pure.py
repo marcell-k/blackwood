@@ -1,4 +1,3 @@
-
 import numpy as np
 import pandas as pd
 
@@ -18,13 +17,11 @@ def get_typical_price(df: pd.DataFrame) -> np.ndarray:
         Typical price values as float64 array.
 
     """
-    return ((df['High'] + df['Low'] + df['Close']) / 3).to_numpy(np.float64)
+    return ((df["High"] + df["Low"] + df["Close"]) / 3).to_numpy(np.float64)
+
 
 def _homodyne_discriminator_kernel_pure(
-    price: np.ndarray,
-    cycpart: float,
-    min_period: float = 6.0,
-    max_period: float = 50.0
+    price: np.ndarray, cycpart: float, min_period: float = 6.0, max_period: float = 50.0
 ) -> np.ndarray:
     """
     Pure NumPy implementation of Ehlers Homodyne Discriminator.
@@ -83,56 +80,55 @@ def _homodyne_discriminator_kernel_pure(
 
         # 1. Smooth Data (4-bar WMA)
         # Formula: (4*P + 3*P[1] + 2*P[2] + 1*P[3]) / 10
-        smooth[i] = (4 * price[i] + 3 * price[i-1] +
-                     2 * price[i-2] + 1 * price[i-3]) / 10.0
+        smooth[i] = (4 * price[i] + 3 * price[i - 1] + 2 * price[i - 2] + 1 * price[i - 3]) / 10.0
 
         # 2. Amplitude Correction using PREVIOUS Period
-        amp_corr = 0.075 * period[i-1] + 0.54
+        amp_corr = 0.075 * period[i - 1] + 0.54
 
         # 3. Detrender (Hilbert Transform part 1)
-        detrender[i] = (0.0962 * smooth[i] + 0.5769 * smooth[i-2] -
-                        0.5769 * smooth[i-4] - 0.0962 * smooth[i-6]) * amp_corr
+        detrender[i] = (
+            0.0962 * smooth[i] + 0.5769 * smooth[i - 2] - 0.5769 * smooth[i - 4] - 0.0962 * smooth[i - 6]
+        ) * amp_corr
 
         # 4. Compute Q1 (Quadrature) and I1 (InPhase)
-        q1[i] = (0.0962 * detrender[i] + 0.5769 * detrender[i-2] -
-                 0.5769 * detrender[i-4] - 0.0962 * detrender[i-6]) * amp_corr
-        i1[i] = detrender[i-3]
+        q1[i] = (
+            0.0962 * detrender[i] + 0.5769 * detrender[i - 2] - 0.5769 * detrender[i - 4] - 0.0962 * detrender[i - 6]
+        ) * amp_corr
+        i1[i] = detrender[i - 3]
 
         # 5. Advance Phase of I1 and Q1 by 90 degrees (jI, jQ)
-        jI[i] = (0.0962 * i1[i] + 0.5769 * i1[i-2] -
-                 0.5769 * i1[i-4] - 0.0962 * i1[i-6]) * amp_corr
-        jQ[i] = (0.0962 * q1[i] + 0.5769 * q1[i-2] -
-                 0.5769 * q1[i-4] - 0.0962 * q1[i-6]) * amp_corr
+        jI[i] = (0.0962 * i1[i] + 0.5769 * i1[i - 2] - 0.5769 * i1[i - 4] - 0.0962 * i1[i - 6]) * amp_corr
+        jQ[i] = (0.0962 * q1[i] + 0.5769 * q1[i - 2] - 0.5769 * q1[i - 4] - 0.0962 * q1[i - 6]) * amp_corr
 
         # 6. Phasor Addition for 3-bar averaging
         i2[i] = i1[i] - jQ[i]
         q2[i] = q1[i] + jI[i]
 
         # 7. Smooth I2 and Q2
-        i2[i] = 0.2 * i2[i] + 0.8 * i2[i-2]
-        q2[i] = 0.2 * q2[i] + 0.8 * q2[i-2]
+        i2[i] = 0.2 * i2[i] + 0.8 * i2[i - 2]
+        q2[i] = 0.2 * q2[i] + 0.8 * q2[i - 2]
 
         # 8. Homodyne Discriminator
         # Signal * ComplexConjugate(Signal[1])
-        re[i] = i2[i] * i2[i-1] + q2[i] * q2[i-1]
-        im[i] = i2[i] * q2[i-1] - q2[i] * i2[i-1]
+        re[i] = i2[i] * i2[i - 1] + q2[i] * q2[i - 1]
+        im[i] = i2[i] * q2[i - 1] - q2[i] * i2[i - 1]
 
         # 9. Smooth Re and Im
-        re[i] = 0.2 * re[i] + 0.8 * re[i-1]
-        im[i] = 0.2 * im[i] + 0.8 * im[i-1]
+        re[i] = 0.2 * re[i] + 0.8 * re[i - 1]
+        im[i] = 0.2 * im[i] + 0.8 * im[i - 1]
 
         # 10. Calculate Period
         # Logic: Period = 2*pi / PhaseChange. PhaseChange = arctan(Im/Re)
         if im[i] != 0 and re[i] != 0:
             period[i] = 2 * np.pi / np.arctan(im[i] / re[i])
         else:
-            period[i] = period[i-1]  # Carry forward if undefined
+            period[i] = period[i - 1]  # Carry forward if undefined
 
         # 11. Clamp Period change rate (max 50% increase, max 33% decrease)
-        if period[i] > 1.5 * period[i-1]:
-            period[i] = 1.5 * period[i-1]
-        if period[i] < 0.67 * period[i-1]:
-            period[i] = 0.67 * period[i-1]
+        if period[i] > 1.5 * period[i - 1]:
+            period[i] = 1.5 * period[i - 1]
+        if period[i] < 0.67 * period[i - 1]:
+            period[i] = 0.67 * period[i - 1]
 
         # 12. Clamp hard bounds (6 to 50 bars)
         if period[i] < min_period:
@@ -141,8 +137,8 @@ def _homodyne_discriminator_kernel_pure(
             period[i] = max_period
 
         # 13. Smooth Period
-        period[i] = 0.2 * period[i] + 0.8 * period[i-1]
-        smooth_period[i] = 0.33 * period[i] + 0.67 * smooth_period[i-1]
+        period[i] = 0.2 * period[i] + 0.8 * period[i - 1]
+        smooth_period[i] = 0.33 * period[i] + 0.67 * smooth_period[i - 1]
 
         # 14. Final Domain Cycle Calculation
         val = smooth_period[i] * cycpart
@@ -150,11 +146,9 @@ def _homodyne_discriminator_kernel_pure(
 
     return dom_cycle
 
+
 def ehler_dominant_cycle_pure(
-    price: np.ndarray,
-    cycpart: float = 0.5,
-    min_period: int = 6,
-    max_period: int = 50
+    price: np.ndarray, cycpart: float = 0.5, min_period: int = 6, max_period: int = 50
 ) -> np.ndarray:
     """
     Pure NumPy wrapper for Ehlers dominant cycle detector.
@@ -177,6 +171,7 @@ def ehler_dominant_cycle_pure(
 
     """
     return _homodyne_discriminator_kernel_pure(price, cycpart, min_period, max_period)
+
 
 def adaptive_atr_ehlers_pure(
     data: pd.DataFrame,
@@ -301,10 +296,7 @@ def adaptive_atr_ehlers_pure(
     # Reference period: midpoint of observed adaptive_period if not given
     if period_ref is None:
         valid_period = period_arr[np.isfinite(period_arr)]
-        if valid_period.size > 0:
-            period_ref = 0.5 * (valid_period.min() + valid_period.max())
-        else:
-            period_ref = 20.0  # safe fallback
+        period_ref = 0.5 * (valid_period.min() + valid_period.max()) if valid_period.size > 0 else 20.0
 
     # Raw multiplier proportional to period / period_ref
     with np.errstate(divide="ignore", invalid="ignore"):
@@ -324,11 +316,7 @@ def adaptive_atr_ehlers_pure(
 
 
 def _zigzag_core_pure(
-    high: np.ndarray,
-    low: np.ndarray,
-    close: np.ndarray,
-    threshold: np.ndarray,
-    use_high_low: bool = False
+    high: np.ndarray, low: np.ndarray, close: np.ndarray, threshold: np.ndarray, use_high_low: bool = False
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Core zigzag detection with strict high-low alternation.
@@ -587,18 +575,14 @@ def calculate_zigzag_pure(
     threshold_array = threshold_series.values
 
     zigzag_values, pivot_indices, pivot_types, pivot_available_at = _zigzag_core_pure(
-        df['High'].values,
-        df['Low'].values,
-        df['Close'].values,
-        threshold_array,
-        use_high_low=use_high_low
+        df["High"].values, df["Low"].values, df["Close"].values, threshold_array, use_high_low=use_high_low
     )
 
     result_df = df.copy()
-    result_df['zigzag'] = zigzag_values
-    result_df['pivot_high'] = pivot_types == 1
-    result_df['pivot_low'] = pivot_types == -1
-    result_df['pivot_available_at'] = pivot_available_at
-    result_df['zigzag_threshold'] = threshold_array
+    result_df["zigzag"] = zigzag_values
+    result_df["pivot_high"] = pivot_types == 1
+    result_df["pivot_low"] = pivot_types == -1
+    result_df["pivot_available_at"] = pivot_available_at
+    result_df["zigzag_threshold"] = threshold_array
 
     return result_df

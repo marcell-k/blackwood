@@ -209,10 +209,7 @@ class OptimizerVisualizer:
         metric_col: str = "SharpeRatio",
         size: int = 2,
     ) -> None:
-        if isinstance(params, dict):
-            param_names = list(params.keys())
-        else:
-            param_names = list(params)
+        param_names = list(params.keys()) if isinstance(params, dict) else list(params)
 
         n_params = len(param_names)
         if n_params < 1 or n_params > 9:
@@ -452,7 +449,7 @@ class SamboOptimizer(BaseOptimizer):
         class ConfiguredStrategy(strategy_class):
             pass
 
-        for name, val in zip(param_names, optimized_params):
+        for name, val in zip(param_names, optimized_params, strict=True):
             if val is None or (isinstance(val, (float, np.floating)) and not np.isfinite(val)):
                 continue
             if isinstance(val, (int, np.integer)) or (isinstance(val, float) and float(val).is_integer()):
@@ -572,7 +569,7 @@ class SamboOptimizer(BaseOptimizer):
                 best_idx = heatmap.idxmax(skipna=True)
                 if not isinstance(best_idx, tuple):
                     best_idx = (best_idx,)
-                best_map = dict(zip(heatmap.index.names, best_idx))
+                best_map = dict(zip(heatmap.index.names, best_idx, strict=True))
                 optimized_params = [best_map.get(n) for n in param_names]
 
             optimizer_info = heatmap
@@ -586,7 +583,7 @@ class SamboOptimizer(BaseOptimizer):
 
         return self._create_result(
             stats=final_stats,
-            params=dict(zip(param_names, optimized_params)),
+            params=dict(zip(param_names, optimized_params, strict=True)),
             param_names=param_names,
             results_df=results_df,
             optimizer_info=optimizer_info,
@@ -624,7 +621,7 @@ class GridOptimizer(BaseOptimizer):
         best_score = -np.inf
 
         for i, vals in enumerate(product(*grids), 1):
-            params = dict(zip(param_names, vals))
+            params = dict(zip(param_names, vals, strict=True))
             if constraint and not constraint(params):
                 continue
 
@@ -766,7 +763,7 @@ class OptunaOptimizer(BaseOptimizer):
                 return score
             except Exception as exc:
                 if prune_on_error:
-                    raise optuna.TrialPruned(str(exc))
+                    raise optuna.TrialPruned(str(exc)) from exc
                 raise
 
         self.study.optimize(objective, n_trials=int(n_trials), show_progress_bar=verbose)
@@ -970,7 +967,7 @@ class PortfolioOptimizer(BaseOptimizer):
         best_score = -np.inf if direction == "maximize" else np.inf
 
         for i, vals in enumerate(product(*grids), 1):
-            params = dict(zip(param_names, vals))
+            params = dict(zip(param_names, vals, strict=True))
             if constraint and not constraint(params):
                 continue
 
