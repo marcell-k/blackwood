@@ -1,27 +1,53 @@
 [project]
 name = "blackwood"
 version = "0.1.0"
-description = "Add your description here"
+description = "Quantitative trading research framework: backtesting, meta-labeling, regime detection, portfolio optimization, and robustness validation"
 readme = "README.md"
+license = { file = "LICENSE.md" }
 requires-python = ">=3.13"
+keywords = ["quantitative-finance", "backtesting", "algorithmic-trading", "portfolio-optimization", "meta-labeling"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Science/Research",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Scientific/Engineering",
+]
 dependencies = [
     "backtesting>=0.6.5",
     "matplotlib>=3.11.0",
     "numpy>=2.4.6",
     "pandas>=3.0.3",
-    "pandas-stubs>=3.0.3.260530",
     "plotly>=6.8.0",
     "sambo>=1.25.2",
 ]
 
 [project.optional-dependencies]
+ml = [
+    "xgboost",
+    "scikit-learn",
+    "optuna",
+    "hmmlearn",
+    "numba",
+]
+portfolio = [
+    "cvxpy",
+    "scipy",
+]
+all = [
+    "blackwood[ml]",
+    "blackwood[portfolio]",
+]
 dev = [
     "pytest>=8.0",
-    "pandas-stubs>=2.0",
+    "pandas-stubs>=3.0.3.260530",
     "basedpyright>=1.39.8",
     "ruff>=0.15.17",
 ]
 
+[project.urls]
+Repository = "https://github.com/marcell-k/blackwood"
+Issues = "https://github.com/marcell-k/blackwood/issues"
 
 [tool.ruff]
 src = ["src"]
@@ -40,3 +66,6 @@ venvPath = "."
 venv = ".venv"
 include = ["src"]
 typeCheckingMode = "standard"
+
+[tool.pytest.ini_options]
+testpaths = ["src"]

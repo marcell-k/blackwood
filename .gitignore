@@ -27,3 +27,6 @@ htmlcov/
 
 # Ruff
 .ruff_cache/
+
+# Env
+.env
