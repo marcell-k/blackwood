@@ -1,10 +1,10 @@
 import os
 from collections.abc import Callable, Sequence
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, cast
 
 import pandas as pd
-from backtesting import Backtest
+from backtesting import Backtest, Strategy
 
 from blackwood.config import (
     CASH,
@@ -22,6 +22,7 @@ from blackwood.presets.instruments import (
     TIMEZONE_INSTRUMENT,
     US_OFFSET_INSTRUMENTS,
 )
+from blackwood.strategies.base import BuyAndHoldStrategy
 
 _DATA_DIR = str(DATA_DIR)
 _NEWS_PATH = str(NEWS_PATH)
@@ -32,6 +33,9 @@ _OHLCV_AGG = {
     "Close": "last",
     "Volume": "sum",
 }
+
+
+type SecurityData = tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, float, tuple[float, float]]
 
 
 @lru_cache(maxsize=256)
@@ -61,9 +65,9 @@ def load_security(
     news_impacts: Sequence[str] = ("red", "High Impact Expected"),
     indicator_fn: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     use_news: bool = True,
-    session_hours: bool | tuple[int, int] = False,
+    session_hours: Literal[False] | tuple[int, int] = False,
     is_stocks: bool = False,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, float, tuple[float, float]]:
+) -> SecurityData:
     rule = resample_rule if resample_rule else "D"
 
     if is_stocks:
@@ -82,8 +86,8 @@ def load_security(
     else:
         file_granularity = "M5" if base_path == _DATA_DIR else "M15"
         default_tz = TIMEZONE_INSTRUMENT.get(security)
-        spread = BROKER_SPREADS.get(security)
-        commission = BROKER_COMMISSION.get(security)
+        spread = BROKER_SPREADS.get(security) or 0.0
+        commission = BROKER_COMMISSION.get(security) or (0.0, 0.0)
         currencies = NEWS_CURRENCIES.get(security, ("", ""))
 
     tz = timezone or default_tz
@@ -100,30 +104,33 @@ def load_security(
 
     if is_us_future and is_intraday_agg:
         df_naive = df.copy()
-        df_naive.index = df_naive.index.tz_convert(tz)
-        df_naive.index = df_naive.index.tz_localize(None)
-        origin_naive = pd.Timestamp("2000-01-01 09:30:00")
-        df_resampled = df_naive.resample(rule, origin=origin_naive).agg(_OHLCV_AGG).dropna()
-        df = df_resampled
-        df.index = df.index.tz_localize(tz, ambiguous="infer")
-    else:
-        if df.index.tz is None:
-            df.index = df.index.tz_localize("UTC")
-        else:
-            df.index = df.index.tz_convert("UTC")
-        df = df.resample(rule, origin="start_day").agg(_OHLCV_AGG).dropna()
-        df.index = df.index.tz_convert(tz)
+        naive_idx = pd.DatetimeIndex(df_naive.index).tz_convert(tz).tz_localize(None)
+        df_naive.index = naive_idx
 
+        origin_naive = pd.Timestamp("2000-01-01 09:30:00")
+        df_resampled = df_naive.resample(rule, origin=origin_naive).agg(_OHLCV_AGG).dropna()  # type: ignore[arg-type]
+        df = df_resampled
+        df.index = pd.DatetimeIndex(df.index).tz_localize(tz, ambiguous="infer")
+    else:
+        idx = pd.DatetimeIndex(df.index)
+        if idx.tz is None:
+            df.index = idx.tz_localize("UTC")
+        else:
+            df.index = idx.tz_convert("UTC")
+        df = df.resample(rule, origin="start_day").agg(_OHLCV_AGG).dropna()  # type: ignore[arg-type]
+        df.index = pd.DatetimeIndex(df.index).tz_convert(tz)
     if indicator_fn is not None:
         df = indicator_fn(df)
 
     if session_hours is not False:
         start_hour, end_hour = session_hours
-        df = df[(df.index.hour >= start_hour) & (df.index.hour <= end_hour)]
+        idx = cast("pd.DatetimeIndex", df.index)
+        df = df[(idx.hour >= start_hour) & (idx.hour <= end_hour)]
 
     if use_news:
         if news_df is None:
             news_df = _load_news_csv_cached(_NEWS_PATH)
+        assert tz is not None, "timezone could not be resolved for security"
         df["News"] = process_news(
             df,
             news_df,
@@ -133,7 +140,7 @@ def load_security(
             impacts=news_impacts,
         )
 
-    split_date = pd.Timestamp(split_time).tz_localize(df.index.tz)
+    split_date = pd.Timestamp(split_time).tz_localize(cast("pd.DatetimeIndex", df.index).tz)
     train = df.loc[df.index < split_date].copy()
     oos = df.loc[df.index >= split_date].copy()
 
@@ -146,13 +153,13 @@ def load_security(
 
 def run_batch_backtest(
     symbols: list[str] | None = None,
-    strategy_cls: type = None,
-    timeframe: str = None,
+    strategy_cls: type[Strategy] = BuyAndHoldStrategy,
+    timeframe: str | None = None,
     indicator_fn: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     data: Literal["train", "oos", "df"] = "train",
     cash: float = CASH,
     margin: float = MARGIN,
-    base_path: str = DATA_DIR,
+    base_path: str = _DATA_DIR,
     is_stocks: bool = False,
     force_timezone: str | None = None,
     verbose: bool = True,
@@ -239,11 +246,11 @@ def run_batch_backtest(
                 result["Mean RRR"] = round(stats["_trades"]["RiskRewardRatio"].mean(), 2)
             results_list.append(result)
         except FileNotFoundError:
-            print(f"❌ Error: File not found for {symbol}")
+            print(f" Error: File not found for {symbol}")
         except KeyError as e:
-            print(f"❌ Error: Configuration missing for {symbol} - {e}")
+            print(f" Error: Configuration missing for {symbol} - {e}")
         except Exception as e:
-            print(f"❌ Error testing {symbol}: {e!s}")
+            print(f" Error testing {symbol}: {e!s}")
 
     if not results_list:
         print("⚠ No valid results generated.")
@@ -281,8 +288,8 @@ def _create_equal_weight_portfolio(equity_curves: dict[str, pd.Series]) -> pd.Se
 
 
 def run_full_suite(
-    strategy_cls: type,
-    timeframes: list[str] = None,
+    strategy_cls: type[Strategy],
+    timeframes: list[str] | None = None,
     indicator_fn: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     data: Literal["train", "oos", "df"] = "train",
     cash: float = CASH,
@@ -330,6 +337,7 @@ def run_full_suite(
             return pd.DataFrame(), {}
 
     all_equity_curves = {}
+    results_df = pd.DataFrame()
     for tf in timeframes:
         results_df, equity_curves = run_batch_backtest(
             symbols=list(symbols) if symbols else None,
@@ -408,13 +416,13 @@ def run_full_suite(
 
 
 def run_full_suite_berlin_tz(
-    strategy_cls: type,
-    timeframes: list[str] = None,
+    strategy_cls: type[Strategy],
+    timeframes: list[str] | None = None,
     indicator_fn: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     data: Literal["train", "oos", "df"] = "train",
     cash: float = CASH,
     margin: float = MARGIN,
-    base_path: str = DATA_DIR,
+    base_path: str = _DATA_DIR,
     symbols: Sequence[str] | None = None,
     is_stocks: bool = False,
     asset_classes: str | tuple[str, ...] = "All",

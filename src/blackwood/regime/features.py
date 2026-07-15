@@ -10,14 +10,14 @@ from blackwood.indicators.cycle import (
 
 
 class RegimeFeatureEngineer:
-    def __init__(self, df, timeframes: list):
+    def __init__(self, df: pd.DataFrame, timeframes: list[str]) -> None:
         self.timeframes = timeframes
         self.data = df
 
         self._resampled_cache: dict[str, pd.DataFrame] = {}
         self._features_cache: dict[str, pd.DataFrame] = {}
 
-    def volatility_features(self, df):
+    def volatility_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Volatility features:
             - atr
@@ -44,20 +44,20 @@ class RegimeFeatureEngineer:
 
         return features.fillna(0)
 
-    def stationary_features(self, df):
+    def stationary_features(self, df: pd.DataFrame) -> pd.DataFrame:
         features = pd.DataFrame(index=df.index)
         # close = df["Close"]
         # log_returns = np.log(close / close.shift(1))
         # TODO: add rolling hurst exponent
         return features
 
-    def correlation_features(self, df):
+    def correlation_features(self, df: pd.DataFrame) -> pd.DataFrame:
         features = pd.DataFrame(index=df.index)
 
         # TODO acf, pacf
         return features
 
-    def technical_features(self, df):
+    def technical_features(self, df: pd.DataFrame) -> pd.DataFrame:
         features = pd.DataFrame(index=df.index)
 
         dominant_period = ehler_dominant_cycle(get_typical_price(df), 0.5)
@@ -73,9 +73,7 @@ class RegimeFeatureEngineer:
 
         return pd.concat(feature_list, axis=1)
 
-    def run(
-        self,
-    ):
+    def run(self):
         aligned_features = []
         for tf in self.timeframes:
             df_resampled = self._resample_ohlcv(tf)

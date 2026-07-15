@@ -5,13 +5,14 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from backtesting import Strategy
+from matplotlib.figure import Figure
 from plotly.subplots import make_subplots
 from scipy.stats import combine_pvalues
 from tqdm import tqdm
 
 from blackwood.config import CASH, RANDOM_STATE
 from blackwood.data.bootstrap import OHLCBootstrap
-from blackwood.visualization.style import DEFAULT_STYLE
+from blackwood.visualization.style import DEFAULT_STYLE, PlotStyle
 
 
 class PermutationWalkForwardTester:
@@ -20,7 +21,9 @@ class PermutationWalkForwardTester:
     Supports multiple metrics and augments with Neyman-Pearson LRT p-values per metric.
     """
 
-    def __init__(self, optimizer: Any, cash: float = CASH, commission: tuple | None = None, spread: float = 0.0):
+    def __init__(
+        self, optimizer: Any, cash: float = CASH, commission: tuple | None = None, spread: float = 0.0
+    ) -> None:
         self.opt = getattr(optimizer, "optimizer", optimizer)
         self.cash = cash
         self.commission = commission
@@ -216,23 +219,23 @@ class PermutationWalkForwardTester:
 class MonteCarloInSampleTester:
     """Monte Carlo permutation testing for in-sample strategy validation with PlotStyle theming."""
 
-    def __init__(self, optimizer, style=None):
+    def __init__(self, optimizer, style: PlotStyle) -> None:
         self.opt = getattr(optimizer, "optimizer", optimizer)
         self.cash = getattr(optimizer, "cash", CASH)
         self.style = style or DEFAULT_STYLE
 
     def test_strategy(
         self,
-        train_df,
-        strategy_class,
+        train_df: pd.DataFrame,
+        strategy_class: Strategy,
         metric: str = "Profit Factor",
         n_permutations: int = 200,
         optimize_on_permutation: bool = False,
         optimize_on_real: bool = True,
-        constraint=None,
-        params=None,
+        constraint: Callable | None = None,
+        params: dict[str, tuple] | None = None,
         max_tries: int = 40,
-        random_state=None,
+        random_state: int = RANDOM_STATE,
         progress: bool = True,
         spread: float | None = None,
         commission: float | tuple[float, float] | Callable | None = None,
@@ -257,14 +260,6 @@ class MonteCarloInSampleTester:
             Dictionary containing results (see original docstring for full details)
 
         """
-        # Set default random state if not provided
-        if random_state is None:
-            random_state = RANDOM_STATE
-
-        # Validation
-        if n_permutations <= 0:
-            raise ValueError("n_permutations must be > 0")
-
         # Step 1: Run backtest on real data (with or without optimization)
         param_names = []
         real_params = []
@@ -412,7 +407,7 @@ class MonteCarloInSampleTester:
             "optimized_params": dict(zip(param_names, real_params, strict=True)) if param_names else {},
         }
 
-    def create_distribution_plot(self, results):
+    def create_distribution_plot(self, results) -> Figure:
         """Create comprehensive visualization of Monte Carlo permutation test results with PlotStyle theming."""
         if "error" in results:
             fig = go.Figure()
@@ -654,7 +649,7 @@ class MonteCarloInSampleTester:
         self.style.apply(fig)
         return fig
 
-    def create_summary_plot(self, results):
+    def create_summary_plot(self, results) -> Figure:
         """Create summary visualization focusing on key statistical insights."""
         import plotly.graph_objects as go
 
@@ -744,7 +739,7 @@ class MonteCarloInSampleTester:
             title=dict(
                 text=f"<b>Monte Carlo Test Summary: {results['metric']}</b><br>"
                 f"<sub>P-value: {results['p_value']:.4f} | "
-                f"{'✅ Significant' if results['is_significant'] else '❌ Not Significant'} | "
+                f"{'Significant' if results['is_significant'] else 'Not Significant'} | "
                 f"Valid Permutations: {results['n_valid_permutations']}/{results['n_permutations']}</sub>",
                 x=0.5,
                 font=dict(size=16, color=self.style.font_color),
@@ -774,7 +769,7 @@ class MonteCarloInSampleTester:
         self.style.apply(fig)
         return fig
 
-    def interpret_results(self, results, significance_level: float = 0.05):
+    def interpret_results(self, results, significance_level: float = 0.05) -> None:
         """Print human-readable interpretation of Monte Carlo test results."""
         print("=" * 70)
         print("MONTE CARLO IN-SAMPLE PERMUTATION TEST RESULTS")
@@ -827,14 +822,14 @@ class MonteCarloInSampleTester:
 
     def run_full_analysis(
         self,
-        train_df,
-        strategy_class,
+        train_df: pd.DataFrame,
+        strategy_class: Strategy,
         metric: str = "Profit Factor",
         n_permutations: int = 200,
         optimize_on_permutation: bool = False,
         show_plots: bool = True,
         **kwargs,
-    ):
+    ) -> dict[str, float]:
         """
         Run complete Monte Carlo analysis with visualization.
 

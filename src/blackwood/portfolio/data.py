@@ -10,8 +10,6 @@ from numba import njit
 from scipy.stats import entropy
 from sklearn.feature_selection import mutual_info_regression
 
-from blackwood.visualization.style import DEFAULT_STYLE
-
 
 def load_strategy_files(
     directory_path: str, start_date: str | pd.Timestamp | None = None
@@ -391,10 +389,6 @@ class RelationshipAnalyzer:
 
         return pd.DataFrame(results).sort_values("TE_mean", ascending=False)
 
-    def _apply_style(self, fig: plt.Figure):
-        DEFAULT_STYLE.apply_mpl(fig=fig)
-        return fig
-
     def plot_static_correlation_heatmap(self) -> plt.Figure:
         """
         Global correlation heatmap for full period.
@@ -421,7 +415,7 @@ class RelationshipAnalyzer:
 
         ax.set_title("Static Correlation Matrix (Full Period)", fontsize=14, fontweight="bold")
         plt.tight_layout()
-        return self._apply_style(fig)
+        return self.apply_style(fig)
 
     def plot_rolling_comparison(self, rolling_data: dict[str, pd.DataFrame], window: int) -> plt.Figure:
         """
@@ -469,7 +463,7 @@ class RelationshipAnalyzer:
             axes[i, 1].grid(alpha=0.3)
 
         plt.tight_layout()
-        return self._apply_style(fig)
+        return self.apply_style(fig)
 
     def plot_correlation_regime_heatmap(self, window: int = 252, top_n: int = 10) -> plt.Figure:
         """
@@ -541,7 +535,7 @@ class RelationshipAnalyzer:
         cbar.set_label("Correlation", rotation=270, labelpad=20)
 
         plt.tight_layout()
-        return self._apply_style(fig)
+        return self.apply_style(fig)
 
     def plot_transfer_entropy(self, window: int = 126, lag: int = 1) -> plt.Figure:
         """
@@ -597,7 +591,7 @@ class RelationshipAnalyzer:
         ax2.grid(alpha=0.3)
 
         plt.tight_layout()
-        return self._apply_style(fig)
+        return self.apply_style(fig)
 
     def run_full_analysis(self, window: int = 252, stride: int = 5, show_plots: bool = True) -> dict[str, any]:
         """

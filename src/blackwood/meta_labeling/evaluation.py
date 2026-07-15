@@ -7,7 +7,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from backtesting import Backtest
+from backtesting import Backtest, Strategy
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from sklearn.metrics import (
     accuracy_score,
     auc,
@@ -17,10 +19,10 @@ from sklearn.metrics import (
 )
 
 from blackwood.config import CASH, MARGIN
-from blackwood.visualization.style import DEFAULT_STYLE
+from blackwood.visualization.style import DEFAULT_STYLE, PlotStyle
 
 
-def _apply_axis_style(ax: plt.Axes, style) -> None:
+def _apply_axis_style(ax: Axes, style: PlotStyle) -> None:
     """Apply consistent styling to matplotlib axis."""
     ax.set_facecolor(style.plot_bgcolor)
     ax.grid(True, color=style.grid, alpha=0.6, linewidth=0.5)
@@ -33,7 +35,7 @@ def _apply_axis_style(ax: plt.Axes, style) -> None:
     ax.title.set_color(style.font_color)
 
 
-def _style_legend(ax: plt.Axes, style, **kwargs) -> None:
+def _style_legend(ax: Axes, style: PlotStyle, **kwargs) -> None:
     """Create styled legend on axis."""
     leg = ax.legend(facecolor=style.plot_bgcolor, edgecolor=style.line, **kwargs)
     for text in leg.get_texts():
@@ -113,7 +115,7 @@ class XGBoostModelEvaluator:
         self.train_loss_history = np.asarray(train_hist, dtype=float) if train_hist else None
         self.val_loss_history = np.asarray(val_hist, dtype=float) if val_hist else None
 
-    def plot_learning_curves(self, figsize: tuple[int, int] = (10, 6)):
+    def plot_learning_curves(self, figsize: tuple[int, int] = (10, 6)) -> Figure:
         """Plot Train vs Validation logloss curves."""
         if self.train_loss_history is None or len(self.train_loss_history) == 0:
             raise ValueError("No training loss history available.")
@@ -141,7 +143,7 @@ class XGBoostModelEvaluator:
         fig.tight_layout()
         return fig
 
-    def _plot_single_roc(self, ax: plt.Axes, X: pd.DataFrame, y: pd.Series, title: str, style) -> None:
+    def _plot_single_roc(self, ax: Axes, X: pd.DataFrame, y: pd.Series, title: str, style: PlotStyle) -> None:
         """Plot ROC curve on a single axis."""
         y_proba = self.model.predict_proba(X)[:, 1]
         fpr, tpr, _ = roc_curve(y, y_proba)
@@ -154,24 +156,12 @@ class XGBoostModelEvaluator:
         ax.set_xlabel("False Positive Rate")
         ax.set_ylabel("True Positive Rate")
         ax.set_title(title)
-        ax.set_xlim([0.0, 1.0])
-        ax.set_ylim([0.0, 1.05])
+        ax.set_xlim((0.0, 1.0))
+        ax.set_ylim((0.0, 1.05))
         _style_legend(ax, style, loc="lower right")
 
-    def plot_roc_auc_curves(self, figsize: tuple[int, int] = (12, 5), style=None):
+    def plot_roc_auc_curves(self, figsize: tuple[int, int] = (12, 5), style: PlotStyle = DEFAULT_STYLE) -> Figure:
         """Plot ROC-AUC curves for train/dev/test with AUC scores."""
-        if style is None:
-            style = SimpleNamespace(
-                paper_bgcolor="#1e1e1e",
-                plot_bgcolor="#252526",
-                accent1="#4fc3f7",
-                accent2="#ff6b6b",
-                muted="#808080",
-                grid="#3e3e3e",
-                line="#5e5e5e",
-                font_color="#d4d4d4",
-            )
-
         fig, axes = plt.subplots(1, 3, figsize=figsize)
         fig.patch.set_facecolor(style.paper_bgcolor)
 
@@ -247,18 +237,18 @@ def _interpolate_equity_and_drawdown(stats: dict) -> tuple[pd.Series, pd.Series]
 
 def run_gate_sweep_and_plot(
     df: pd.DataFrame,
-    StrategyClass,
-    cash: int = CASH,
+    StrategyClass: type[Strategy],
+    cash: float = CASH,
     spread: int = 0,
-    commission: float = (0, 0),
+    commission: tuple[float, float] = (0, 0),
     margin: float = MARGIN,
     gate_col: str = "signal_prob",
     bet_col: str | None = None,
-    gate_values_long: np.ndarray = None,
-    gate_values_short: np.ndarray = None,
+    gate_values_long: np.ndarray | None = None,
+    gate_values_short: np.ndarray | None = None,
     title: str = "GatedStrategy: Cumulative Return and Drawdown by Probability Gate",
     figsize: tuple[int, int] = (12, 8),
-):
+) -> tuple[pd.DataFrame, Figure]:
     """Run parameter sweep over long/short gating thresholds."""
     style = DEFAULT_STYLE
     gate_values_long = np.arange(0.0, 1.01, 0.1) if gate_values_long is None else gate_values_long
@@ -266,7 +256,7 @@ def run_gate_sweep_and_plot(
 
     curves_return, curves_dd, rows = [], [], []
 
-    def build_row(stats, g_long, g_short, type_label=None):
+    def build_row(stats, g_long: float, g_short: float, type_label: str | None = None):
         row = {
             "Gate Long": round(float(g_long), 2),
             "Gate Short": round(float(g_short), 2),
@@ -379,7 +369,9 @@ def run_gate_sweep_and_plot(
     return stats_df, fig
 
 
-def plot_probability_distributions(prob_train, prob_dev, prob_test, bins: int = 30, figsize=(18, 5)):
+def plot_probability_distributions(
+    prob_train, prob_dev, prob_test, bins: int = 30, figsize: tuple[int, int] = (18, 5)
+) -> Figure:
     """Plot predicted probability distributions for train, dev, and test sets."""
     style = DEFAULT_STYLE
     mpl.rcParams.update(
@@ -427,5 +419,5 @@ def plot_probability_distributions(prob_train, prob_dev, prob_test, bins: int = 
         )
 
     fig.suptitle("Predicted Probability Distributions (Meta-Label)", fontsize=14, fontweight="bold", y=0.98)
-    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    plt.tight_layout(rect=(0, 0, 1, 0.96))
     return fig

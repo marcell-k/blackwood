@@ -1,22 +1,27 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from math import ceil
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from plotly.subplots import make_subplots
 from sambo.plot import plot_objective
 from scipy.signal import argrelextrema
 
 from blackwood.visualization.style import DEFAULT_STYLE
 
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
 
 def visualize_chart(
     price_df: pd.DataFrame,
-    bbands_df: pd.DataFrame | list[pd.DataFrame] = None,
+    bbands_df: pd.DataFrame | list[pd.DataFrame] | None = None,
     bbands_names: list[str] | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
@@ -131,7 +136,7 @@ def visualize_chart(
                 if col in price_df.columns and col not in ohlc_dict:
                     ohlc_dict[col] = "last"
 
-        price_df = price_df.resample(resample).agg(ohlc_dict).dropna(subset=["Close"])
+        price_df = price_df.resample(resample).agg(ohlc_dict).dropna(subset=["Close"])  # pyright: ignore[]
 
         # Resample bbands_df list
         bbands_list = [
@@ -533,18 +538,23 @@ def visualize_chart(
             "rgba(156, 39, 176, 0.6)",
         ]
 
-        for idx, zone_row in sr_zones.iterrows():
+        sr_zones["first_detected_idx"] = sr_zones["first_detected_idx"].astype(int)
+        sr_zones["expires_at_idx"] = sr_zones["expires_at_idx"].astype(int)
+        sr_zones["fractal_count"] = sr_zones["fractal_count"].astype(int)
+
+        for counter, (_, zone_row) in enumerate(sr_zones.iterrows()):
             zone_low = zone_row["zone_low"]
             zone_high = zone_row["zone_high"]
-            first_detected_idx = int(zone_row["first_detected_idx"])
-            expires_at_idx = int(zone_row["expires_at_idx"])
-            fractal_count = int(zone_row["fractal_count"])
 
-            # Use original index mapping to get timestamps
+            first_detected_idx = zone_row["first_detected_idx"]
+            expires_at_idx = zone_row["expires_at_idx"]
+            fractal_count = zone_row["fractal_count"]
+
             x0 = original_idx_to_timestamp[first_detected_idx]
             x1 = original_idx_to_timestamp[expires_at_idx]
 
-            color_idx = idx % len(zone_colors)
+            # Pyright loves this because 'counter' is explicitly an int
+            color_idx = counter % len(zone_colors)
             fill_color = zone_colors[color_idx]
             border_color = zone_border_colors[color_idx]
 
@@ -942,26 +952,18 @@ def visualize_chart_date_range(
 
 def plot_price_with_session_ranges(
     df: pd.DataFrame,
-    start_date: str = None,
-    end_date: str = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
     days_to_plot: int = 10,
     show_fractals: bool = False,
     show_prev_day_range: bool = True,
 ) -> go.Figure:
-    """
-    Create candlestick chart with session range boxes and previous day range boxes overlaid.
-    Optionally overlay precomputed fractal levels aligned at their confirmation time.
-    """
     style = DEFAULT_STYLE
-
-    # ------------------------------------------------------------------
-    # Select plotting window
-    # ------------------------------------------------------------------
     if start_date and end_date:
         plot_data = df.loc[start_date:end_date].copy()
     else:
         # Use normalized index to get unique trading days efficiently
-        normalized_index = df.index.normalize()
+        normalized_index = cast("pd.DatetimeIndex", df.index).normalize()
         unique_dates = pd.Index(normalized_index.unique())
         recent_dates = unique_dates[-days_to_plot:]
         if len(recent_dates) == 0:
@@ -970,9 +972,6 @@ def plot_price_with_session_ranges(
             start_day = recent_dates[0]
             plot_data = df.loc[normalized_index >= start_day].copy()
 
-    # ------------------------------------------------------------------
-    # Base candlestick trace
-    # ------------------------------------------------------------------
     fig = go.Figure()
 
     fig.add_trace(
@@ -988,9 +987,7 @@ def plot_price_with_session_ranges(
         )
     )
 
-    # ------------------------------------------------------------------
-    # Previous day range boxes
-    # ------------------------------------------------------------------
+    # ---- Previous day range boxes ----
     if show_prev_day_range and {"PrevDayHigh", "PrevDayLow"}.issubset(plot_data.columns):
         prev_high = plot_data["PrevDayHigh"]
         prev_low = plot_data["PrevDayLow"]
@@ -1037,9 +1034,7 @@ def plot_price_with_session_ranges(
                 )
             )
 
-    # ------------------------------------------------------------------
-    # Current session range boxes
-    # ------------------------------------------------------------------
+    # ---- Current session range boxes ----
     range_high = plot_data["RangeHigh"]
     range_low = plot_data["RangeLow"]
 
@@ -1085,9 +1080,7 @@ def plot_price_with_session_ranges(
             )
         )
 
-    # ------------------------------------------------------------------
-    # Optional fractal overlays
-    # ------------------------------------------------------------------
+    # ---- Optional fractal overlays ----
     if show_fractals and {"Fractal_high", "Fractal_low"}.issubset(plot_data.columns):
         fig.add_trace(
             go.Scatter(
@@ -1119,9 +1112,7 @@ def plot_price_with_session_ranges(
             )
         )
 
-    # ------------------------------------------------------------------
-    # Base layout (semantic, not stylistic)
-    # ------------------------------------------------------------------
+    # ---- Base layout (semantic, not stylistic) ----
     fig.update_layout(
         title="Price Action with Session Range (Blue) and Previous Day Range (Orange)",
         xaxis_title="Time",
@@ -1132,11 +1123,7 @@ def plot_price_with_session_ranges(
         showlegend=True,
     )
 
-    # ------------------------------------------------------------------
-    # Apply global PlotStyle LAST
-    # ------------------------------------------------------------------
     style.apply(fig)
-
     return fig
 
 
@@ -1147,7 +1134,7 @@ class BacktestVisualizer:
         risk_lookback: int = 252,
         extrema_order: int = 50,  # Typical: 20-100; higher = smoother/fewer points
         create_portfolios: bool = False,
-    ):
+    ) -> None:
         """
         Initialize BacktestVisualizer with equity curves.
 
@@ -1187,7 +1174,7 @@ class BacktestVisualizer:
     def _get_color(self, idx: int) -> str:
         return self.colors[idx % len(self.colors)]
 
-    def _apply_style(self, fig: go.Figure) -> go.Figure:
+    def apply_style(self, fig: go.Figure) -> go.Figure:
         return self.style.apply(fig)
 
     def _prepare_strategy_data(self) -> tuple[pd.DataFrame, pd.DataFrame] | None:
@@ -1245,39 +1232,43 @@ class BacktestVisualizer:
         self._finalize_portfolio(portfolio_returns, equity_df, returns_df, "Equal-Risk Portfolio")
 
     def _calculate_drawdown(self, equity: pd.Series) -> tuple[pd.Series, dict[str, int]]:
-        running_max = equity.cummax()
-        drawdown = (equity - running_max) / running_max * 100
-        drawdown_depth = running_max - equity
+        running_max: pd.Series = equity.cummax()
+        drawdown: pd.Series = (equity - running_max) / running_max * 100
+        drawdown_depth: pd.Series = running_max - equity
 
-        if drawdown_depth.max() == 0 or len(equity) == 0:
-            metadata = {"dd_start": 0, "dd_end": 0, "dd_peak": 0}
+        if len(equity) == 0 or drawdown_depth.max() == 0:
+            metadata: dict[str, int] = {"dd_start": 0, "dd_end": 0, "dd_peak": 0}
             return drawdown, metadata
 
-        dd_peak = drawdown_depth.idxmax()
-        dd_peak_idx = equity.index.get_loc(dd_peak)
-        dd_start = equity.iloc[: dd_peak_idx + 1].idxmax()
-        dd_start_idx = equity.index.get_loc(dd_start)
-        equity_at_start = equity.loc[dd_start]
+        # Work in plain numpy/positional space to avoid the get_loc()
+        # `int | slice | np_1darray_bool` union poisoning every downstream type.
+        equity_values: NDArray[np.float64] = equity.to_numpy(dtype=float)
+        drawdown_depth_values: NDArray[np.float64] = drawdown_depth.to_numpy(dtype=float)
+        n = len(equity_values)
 
-        recovery_mask = equity.iloc[dd_peak_idx:] >= equity_at_start
+        dd_peak_idx: int = int(np.argmax(drawdown_depth_values))
+        dd_start_idx: int = int(np.argmax(equity_values[: dd_peak_idx + 1]))
+        equity_at_start: float = float(equity_values[dd_start_idx])
+
+        recovery_mask = equity_values[dd_peak_idx:] >= equity_at_start
         if recovery_mask.any():
-            recovery_label = recovery_mask.idxmax()
-            recovery_idx = equity.index.get_loc(recovery_label)
-            if recovery_idx > dd_peak_idx and equity.iloc[recovery_idx - 1] < equity_at_start:
-                dd_end_idx = np.interp(
-                    equity_at_start,
-                    [equity.iloc[recovery_idx - 1], equity.iloc[recovery_idx]],
-                    [recovery_idx - 1, recovery_idx],
+            recovery_idx: int = dd_peak_idx + int(np.argmax(recovery_mask))
+            if recovery_idx > dd_peak_idx and equity_values[recovery_idx - 1] < equity_at_start:
+                prev_value = float(equity_values[recovery_idx - 1])
+                curr_value = float(equity_values[recovery_idx])
+                dd_end_idx = round(
+                    float(np.interp(equity_at_start, [prev_value, curr_value], [recovery_idx - 1, recovery_idx]))
                 )
+
             else:
                 dd_end_idx = recovery_idx
         else:
-            dd_end_idx = len(equity) - 1
+            dd_end_idx = n - 1
 
         metadata = {
-            "dd_start": int(dd_start_idx),
-            "dd_end": int(dd_end_idx),
-            "dd_peak": int(dd_peak_idx),
+            "dd_start": dd_start_idx,
+            "dd_end": dd_end_idx,
+            "dd_peak": dd_peak_idx,
         }
         return drawdown, metadata
 
@@ -1347,7 +1338,7 @@ class BacktestVisualizer:
         if not filtered_equity:
             fig = go.Figure()
             fig.add_annotation(text="No matching equity curves")
-            return self._apply_style(fig)
+            return self.apply_style(fig)
 
         if show_drawdown:
             fig = make_subplots(
@@ -1418,9 +1409,9 @@ class BacktestVisualizer:
         else:
             fig.update_yaxes(type="log", title_text="Equity ($)")
         fig.update_xaxes(title_text="Date")
-        return self._apply_style(fig)
+        return self.apply_style(fig)
 
-    def return_portfolio(self, type: str, resample: str = None):
+    def return_portfolio(self, type: str, resample: str | None = None) -> pd.Series:
         equity = self.equity_dict[type]
         if resample:
             equity = equity.resample(resample).last().dropna()
@@ -1428,26 +1419,14 @@ class BacktestVisualizer:
 
 
 def create_combined_objective_plots_all_dims(
-    optimize_results,
-    param_names: list[str],
-    estimator: str,
-    max_cols: int = 5,
-) -> dict[str, plt.Figure]:
+    optimize_results, param_names: list[str], estimator: str, max_cols: int = 5
+) -> dict[str, Figure]:
     """
     Create combined objective function plots for all parameters across WFO periods.
-
     Grid dimensions are calculated dynamically based on the number of optimization results.
-
-    Parameters
-    ----------
-    max_cols : int, default=5
-        Maximum number of columns in the subplot grid. Actual columns will be
-        min(len(optimize_results), max_cols). Rows are calculated as
-        ceil(len(optimize_results) / ncols).
-
     """
     style = DEFAULT_STYLE
-    combined_figures: dict[str, plt.Figure] = {}
+    combined_figures: dict[str, Figure] = {}
 
     # Dynamic grid calculation
     n_results = len(optimize_results)
@@ -1470,19 +1449,17 @@ def create_combined_objective_plots_all_dims(
                 print(f"Warning: Could not create plot for WFO period {i + 1}, parameter {param_name}: {e}")
                 individual_figs.append(None)
 
-        def _copy_objective_to_ax(source_ax: plt.Axes, target_ax: plt.Axes) -> None:
+        def _copy_objective_to_ax(source_ax: Axes, target_ax: Axes) -> None:
             y_candidates = []
 
             for line in source_ax.get_lines():
-                x_data = line.get_xdata()
-                y_data = line.get_ydata()
-                if len(x_data) == 0 or len(y_data) == 0:
+                x = np.asarray(line.get_xdata(), dtype=float)
+                y = np.asarray(line.get_ydata(), dtype=float)
+                if x.size == 0 or y.size == 0:
                     continue
-                x = np.asarray(x_data, dtype=float)
-                y = np.asarray(y_data, dtype=float)
                 alpha = line.get_alpha() if line.get_alpha() is not None else 1.0
 
-                if len(x) >= 2 and np.allclose(x, x[0]) and len(y) >= 2 and np.nanmin(y) >= 0.0 and np.nanmax(y) <= 1.0:
+                if x.size >= 2 and np.allclose(x, x[0]) and y.size >= 2 and np.nanmin(y) >= 0.0 and np.nanmax(y) <= 1.0:
                     target_ax.axvline(
                         x=float(x[0]),
                         color=line.get_color(),
@@ -1502,8 +1479,8 @@ def create_combined_objective_plots_all_dims(
                     y_candidates.append(y)
 
             for collection in source_ax.collections:
-                offsets = collection.get_offsets()
-                if len(offsets) == 0:
+                offsets = np.asarray(collection.get_offsets(), dtype=np.float64)
+                if offsets.size == 0:
                     continue
                 offsets = np.asarray(offsets)
                 alpha = collection.get_alpha() if collection.get_alpha() is not None else 1.0
@@ -1562,7 +1539,7 @@ def create_combined_objective_plots_all_dims(
             fontweight="bold",
             color=style.font_color,
         )
-        plt.tight_layout(rect=[0, 0, 1, 0.96])
+        plt.tight_layout(rect=(0, 0, 1, 0.96))
         plt.show()
 
         combined_figures[param_name] = fig
@@ -1582,4 +1559,4 @@ class ChartConfig:
     trace_width: int = 2
     marker_size: int = 3
     show_hline_zero: bool = False
-    layout_overrides: dict[str, Any] = None  # Additional layout customization
+    layout_overrides: dict[str, Any] | None = None  # Additional layout customization

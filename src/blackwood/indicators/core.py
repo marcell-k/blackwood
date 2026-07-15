@@ -1,5 +1,6 @@
 from collections import deque
 from collections.abc import Sequence
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -29,7 +30,7 @@ def add_session_ranges(df: pd.DataFrame, start_time: str = "03:00", end_time: st
         (daily_ranges["RangeHigh"] - daily_ranges["RangeLow"]) / daily_ranges["RangeHigh"]
     ) * 100
 
-    df_days = df.index.floor("D")
+    df_days = cast("pd.DatetimeIndex", df.index).floor("D")
     ranges = daily_ranges.reindex(df_days).ffill()
     df[["RangeHigh", "RangeLow", "SessionRange"]] = ranges.to_numpy(copy=False)
 
@@ -57,8 +58,8 @@ def rolling_zscore(series: pd.Series, window: int = 252, min_periods: int = 20) 
     return (series - rolling_mean) / rolling_std
 
 
-def resample_ohlc(df, resample_rule):
-    new_df = (
+def resample_ohlc(df: pd.DataFrame, resample_rule: str) -> pd.DataFrame:
+    new_df = pd.DataFrame(
         df.resample(resample_rule, label="left", closed="left")
         .agg({"Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"})
         .dropna()
@@ -184,10 +185,10 @@ def compute_combined_volatility(
     l = df["Low"]  # noqa: E741
     c = df[price_col]
 
-    log_hl = np.log(h / l)
-    log_ho = np.log(h / o)
-    log_lo = np.log(l / o)
-    log_co = np.log(c / o)
+    log_hl = cast("pd.Series", np.log(h / l))
+    log_ho = cast("pd.Series", np.log(h / o))
+    log_lo = cast("pd.Series", np.log(l / o))
+    log_co = cast("pd.Series", np.log(c / o))
 
     # Parkinson volatility
     park_roll = log_hl.rolling(window_range, min_periods=window_range).mean()
@@ -199,7 +200,7 @@ def compute_combined_volatility(
     df["rs_vol"] = np.sqrt(rs_var_roll) * np.sqrt(trading_periods)
 
     # Yang-Zhang volatility
-    u = np.log(o / c.shift(1))  # Keep as Series with .shift()
+    u = cast("pd.Series", np.log(o / c.shift(1)))
     v = log_co
 
     sigma_co2 = u.rolling(window_range, min_periods=window_range).var(ddof=1)
@@ -290,7 +291,7 @@ def add_overnight_and_week_gap_features(
     daily_range = df.groupby(dates, observed=True).agg(high_max=("High", "max"), low_min=("Low", "min"))
 
     # Session-based Open/Close (respects open_time/close_time)
-    daily_session = filtered_df.groupby(filtered_df.index.normalize(), observed=True).agg(
+    daily_session = filtered_df.groupby(cast("pd.DatetimeIndex", filtered_df.index).normalize(), observed=True).agg(
         open_first=("Open", "first"), close_last=("Close", "last")
     )
 
@@ -347,12 +348,12 @@ def add_overnight_and_week_gap_features(
     return df
 
 
+def rma(x: float, n: int) -> float:
+    return x.ewm(alpha=1 / n, adjust=False).mean()
+
+
 def calculate_rsi(df: pd.DataFrame, length: int | None = None) -> float:
     """Calculate RSI."""
-
-    def rma(x, n):
-        return x.ewm(alpha=1 / n, adjust=False).mean()
-
     delta = df["Close"].diff()
     gain = delta.copy()
     loss = delta.copy()
@@ -367,12 +368,8 @@ def calculate_rsi(df: pd.DataFrame, length: int | None = None) -> float:
     return rsi
 
 
-def calculate_adx(df: pd.DataFrame, dilen: int = 14, adxlen: int = 14):
+def calculate_adx(df: pd.DataFrame, dilen: int = 14, adxlen: int = 14) -> pd.Series:
     """Calculate ADX."""
-
-    def rma(x, n):
-        return x.ewm(alpha=1 / n, adjust=False).mean()
-
     h, l, c = df["High"], df["Low"], df["Close"]  # noqa: E741
     up, dn = h.diff(), -l.diff()
     pDM = pd.Series(np.where((up > dn) & (up > 0), up, 0), index=df.index)
@@ -504,7 +501,7 @@ def squeeze_momentum(
     source = close - ((mid_hl + sma_c) / 2.0)
 
     # Regular OLS: return slope as momentum
-    slope, intercept = _rolling_ols(source, lengthKC)
+    slope, _intercept = _rolling_ols(source, lengthKC)
     val = slope  # momentum proxy: positive slope = upward momentum, negative = downward
 
     return val, sqzOn
@@ -514,10 +511,6 @@ def squeeze_momentum(
 def calculate_roc(df: pd.DataFrame, period: int) -> pd.Series:
     roc = df["Close"].pct_change(periods=period) * 100
     return roc
-
-
-def rma(series: pd.Series, length: int = 10) -> pd.Series:
-    return series.ewm(1 / length, adjust=False).mean()
 
 
 def calculate_ma(
@@ -939,7 +932,7 @@ def calculate_zigzag(
     threshold_series = (atr_adaptive / atr_divisor).ffill().fillna(np.inf)
     threshold_array = threshold_series.values
 
-    zigzag_values, pivot_indices, pivot_types, pivot_available_at = _zigzag_core(
+    zigzag_values, _pivot_indices, pivot_types, pivot_available_at = _zigzag_core(
         df["High"].values, df["Low"].values, df["Close"].values, threshold_array, use_high_low=use_high_low
     )
 
@@ -1397,7 +1390,7 @@ def process_news(
         return news_flags
 
     # Resolve incoming schema to canonical names
-    def _norm(name):
+    def _norm(name: str) -> str:
         return "".join(ch for ch in str(name).lower() if ch.isalnum())
 
     col_map = {_norm(c): c for c in news_raw.columns}

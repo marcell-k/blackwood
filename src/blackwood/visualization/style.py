@@ -1,12 +1,8 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 import plotly.graph_objects as go
-
-if TYPE_CHECKING:
-    from matplotlib.axes import Axes
-    from matplotlib.figure import Figure
-
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 
 DEFAULT_PALETTE: dict[str, str] = {
     "primary": "#4fc3f7",
@@ -81,18 +77,8 @@ class PlotStyle:
         )
         return fig
 
-    def apply_mpl(self, fig: Figure | None = None, ax: Axes | None = None):
-        """
-        Apply style to Matplotlib figure/axes.
-
-        Parameters
-        ----------
-        fig : Optional[plt.Figure]
-            Matplotlib figure to style
-        ax : Optional[plt.Axes]
-            Matplotlib axes to style (if None, styles all axes in fig)
-
-        """
+    def apply_mpl(self, fig: Figure | None = None, ax: Axes | None = None) -> Figure:
+        """Apply style to Matplotlib figure/axes."""
         import matplotlib.pyplot as plt
 
         if fig is None:

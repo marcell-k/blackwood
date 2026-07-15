@@ -1,14 +1,26 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import time, timedelta
 from enum import Enum
-from typing import Any
+from typing import Any, TypedDict
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from pandas.core.groupby.generic import DataFrameGroupBy
 from plotly.subplots import make_subplots
 
 from blackwood.visualization.style import DEFAULT_STYLE
+
+
+class ZoneMetrics(TypedDict):
+    trades: int
+    win_rate: float
+    profit_factor: float | None
+    avg_rr: float
+    median_rr: float
+    std_rr: float
+    avg_indicator: float | None
 
 
 def _validate_and_clean_df(
@@ -83,7 +95,7 @@ class PerformanceFormatter:
             "Ulcer Index": "Ulcer Index",
         }
 
-        def _format_value(metric_key: str, val: Any) -> str:
+        def _format_value(metric_key: str, val: Any) -> str:  # noqa: ANN401
             if isinstance(val, timedelta):
                 days_str = f"{val.days} days"
                 return f"{days_str:>{value_width}}"
@@ -180,7 +192,7 @@ class PerformanceAnalyzer:
     def __init__(
         self,
         df: pd.DataFrame,
-        grouping_strategy: callable,
+        grouping_strategy: Callable,
         indicator_name: str = "Analysis",
     ) -> None:
         self.df = self._validate_data(df)
@@ -204,7 +216,7 @@ class PerformanceAnalyzer:
 
     @staticmethod
     def compute_metrics(
-        grouped_data: pd.core.groupby.generic.DataFrameGroupBy,
+        grouped_data: DataFrameGroupBy,
         indicator_col: str | None = None,
     ) -> pd.DataFrame:
         trades = grouped_data.size().rename("Trades")
@@ -228,7 +240,7 @@ class PerformanceAnalyzer:
         self,
         trades_df: pd.DataFrame,
         trade_type_name: str,
-    ) -> dict[str, Any]:
+    ) -> dict[str, ZoneMetrics]:
         trades_df = trades_df.copy()
         trades_df["Grouping_Key"] = self.grouping_strategy(trades_df)
         grp = trades_df.groupby("Grouping_Key")
@@ -242,7 +254,7 @@ class PerformanceAnalyzer:
         )
         print("-" * 83)
 
-        zone_stats: dict[str, Any] = {}
+        zone_stats: dict[str, ZoneMetrics] = {}
         for group_id, row in table.iterrows():
             group_display = group_id.strftime("%H:%M") if isinstance(group_id, time) else str(group_id)
 
@@ -271,6 +283,7 @@ class PerformanceAnalyzer:
                 "avg_rr": float(row["AvgRR"]),
                 "median_rr": float(row["MedianRR"]),
                 "std_rr": float(row["StdRR"]),
+                "avg_indicator": None,
             }
 
         return zone_stats
@@ -279,12 +292,12 @@ class PerformanceAnalyzer:
         self,
         trades_df: pd.DataFrame,
         trade_type_name: str,
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, ZoneMetrics] | None:
         if trades_df.empty:
             return None
         return self._print_zone_table(trades_df, trade_type_name)
 
-    def run_analysis(self, trade_direction: str = "both") -> dict[str, Any]:
+    def run_analysis(self, trade_direction: str = "both") -> dict[str, dict[str, dict[str, ZoneMetrics]]]:
         valid_directions = {"all", "long", "short", "both"}
         if trade_direction not in valid_directions:
             raise ValueError(f"trade_direction must be one of {valid_directions}, got '{trade_direction}'")
@@ -371,7 +384,7 @@ class BinnedIndicatorAnalyzer:
         return base * np.ceil(raw_width / base)
 
     def _calculate_percentile_bins(self) -> tuple[list[float], list[str]]:
-        data = self.df[self.indicator_column].values
+        data = self.df[self.indicator_column].to_numpy(dtype=float)
         p_low = np.percentile(data, self.percentile_low)
         p_high = np.percentile(data, self.percentile_high)
         raw_width = (p_high - p_low) / self.n_bins
@@ -390,6 +403,11 @@ class BinnedIndicatorAnalyzer:
 
     def _assign_zone(self, trades_df: pd.DataFrame) -> pd.DataFrame:
         out = trades_df.copy()
+
+        # Ensure Pyright knows these are populated due to checks in __post_init__
+        assert self.bins is not None
+        assert self.labels is not None
+
         out["Zone"] = pd.cut(
             out[self.indicator_column],
             bins=self.bins,
@@ -404,10 +422,12 @@ class BinnedIndicatorAnalyzer:
         self,
         trades_df: pd.DataFrame,
         trade_type_name: str,
-    ) -> dict[str, Any]:
+    ) -> dict[str, ZoneMetrics]:
         dfz = self._assign_zone(trades_df)
         grp = dfz.groupby("Zone", observed=False)
         table = PerformanceAnalyzer.compute_metrics(grp, indicator_col=self.indicator_column)
+
+        assert self.labels is not None
         table = table.reindex(self.labels).fillna(0.0)
 
         zone_width = min(max(len(max(self.labels, key=len)), 25), 45)
@@ -415,7 +435,7 @@ class BinnedIndicatorAnalyzer:
         print(f"\n{title:<25} | Trades | WinRate | ProfitF |   AvgRR | MedianRR |   StdRR | AvgInd")
         print("-" * 95)
 
-        zone_stats: dict[str, Any] = {}
+        zone_stats: dict[str, ZoneMetrics] = {}
         for zone, row in table.iterrows():
             pf = row["ProfitFactor"]
             if np.isnan(pf):
@@ -452,13 +472,13 @@ class BinnedIndicatorAnalyzer:
         self,
         trades_df: pd.DataFrame,
         trade_type_name: str,
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, ZoneMetrics] | None:
         if trades_df.empty:
             print(f"\n{trade_type_name} trades: No data")
             return None
         return self._print_zone_table(trades_df, trade_type_name)
 
-    def run_analysis(self) -> dict[str, Any]:
+    def run_analysis(self) -> dict[str, dict[str, dict[str, ZoneMetrics]]]:
         long_trades = self.df[self.df["Size"] > 0]
         short_trades = self.df[self.df["Size"] < 0]
 
@@ -480,7 +500,7 @@ class BinnedIndicatorAnalyzer:
 
     def plot_analysis(
         self,
-        analysis_results: dict[str, Any],
+        analysis_results: dict[str, dict[str, dict[str, ZoneMetrics]]],
         trade_type: str = "All",
     ) -> go.Figure:
         plot_style = DEFAULT_STYLE
@@ -537,7 +557,7 @@ class BinnedIndicatorAnalyzer:
             row=1,
             col=2,
         )
-        fig.add_hline(y=50, line_dash="dot", line_color=plot_style.muted, opacity=0.7, row=1, col=2)
+        fig.add_hline(y=50, line_dash="dot", line_color=plot_style.muted, opacity=0.7, row="1", col="2")
 
         rrr_colors = [
             plot_style.accent2 if rr < 0 else plot_style.accent4 if rr < 1.0 else plot_style.accent3 for rr in avg_rrs
@@ -553,8 +573,8 @@ class BinnedIndicatorAnalyzer:
             row=1,
             col=3,
         )
-        fig.add_hline(y=0.0, line_dash="dash", line_color=plot_style.accent2, opacity=0.6, row=1, col=3)
-        fig.add_hline(y=1.0, line_dash="dot", line_color=plot_style.muted, opacity=0.7, row=1, col=3)
+        fig.add_hline(y=0.0, line_dash="dash", line_color=plot_style.accent2, opacity=0.6, row="1", col="3")
+        fig.add_hline(y=1.0, line_dash="dot", line_color=plot_style.muted, opacity=0.7, row="1", col="3")
 
         fig.update_layout(
             height=500,
@@ -578,11 +598,13 @@ class BinnedIndicatorAnalyzer:
             title_font=dict(color=plot_style.font_color),
             tickangle=45,
         )
-        fig.update_yaxes(title_text="Trade Count", row=1, col=1, **axis_style)
-        fig.update_yaxes(title_text="Win Rate (%)", row=1, col=2, **axis_style)
-        fig.update_yaxes(title_text="Average RRR", row=1, col=3, **axis_style)
+
+        # Wrapped in a dict patch to avoid Plotly's strict type definition issues for `overwrite` vs `kwargs`
+        fig.update_yaxes({"title_text": "Trade Count", **axis_style}, row="1", col="1")
+        fig.update_yaxes({"title_text": "Win Rate (%)", **axis_style}, row="1", col="2")
+        fig.update_yaxes({"title_text": "Average RRR", **axis_style}, row="1", col="3")
         for col in (1, 2, 3):
-            fig.update_xaxes(row=1, col=col, **axis_style)
+            fig.update_xaxes(axis_style, row="1", col=str(col))
 
         plot_style.apply(fig)
         return fig

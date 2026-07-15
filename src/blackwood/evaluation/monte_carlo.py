@@ -16,6 +16,8 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.figure import Figure
+from matplotlib.ticker import FuncFormatter
 from scipy.stats import genpareto, kurtosis, norm, skew
 
 from blackwood.config import CASH, RANDOM_STATE
@@ -396,7 +398,7 @@ class MonteCarloSimulator:
         self,
         method_key: str,
         observed_equity: np.ndarray | None = None,
-    ) -> plt.Figure:
+    ) -> Figure:
         equity_paths, _, _, metadata = self._results[method_key]
 
         pct_levels = [5, 25, 50, 75, 95]
@@ -469,7 +471,7 @@ class MonteCarloSimulator:
         self,
         method_key: str,
         observed_mdd: float | None = None,
-    ) -> plt.Figure:
+    ) -> Figure:
         _, max_drawdowns, _, metadata = self._results[method_key]
 
         fig, ax = plt.subplots(figsize=(12, 6))
@@ -508,7 +510,7 @@ class MonteCarloSimulator:
             fontsize=DEFAULT_STYLE.title_size,
             pad=15,
         )
-        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda y, _: f"{y:.0%}"))
         ax.legend(loc="upper left", framealpha=0.9, fontsize=DEFAULT_STYLE.font_size)
 
         DEFAULT_STYLE.apply_mpl(fig, ax)
@@ -519,7 +521,7 @@ class MonteCarloSimulator:
         self,
         method_key: str,
         observed_return: float | None = None,
-    ) -> plt.Figure:
+    ) -> Figure:
         equity_paths, _, _, metadata = self._results[method_key]
         final_returns = (equity_paths[:, -1] / self.initial_cash) - 1.0
 
@@ -568,7 +570,7 @@ class MonteCarloSimulator:
             fontsize=DEFAULT_STYLE.title_size,
             pad=15,
         )
-        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda y, _: f"{y:.0%}"))
         ax.legend(loc="upper right", framealpha=0.9, fontsize=DEFAULT_STYLE.font_size)
 
         DEFAULT_STYLE.apply_mpl(fig, ax)

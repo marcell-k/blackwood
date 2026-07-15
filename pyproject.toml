@@ -25,23 +25,26 @@ dependencies = [
   "pandas>=2.2",
   "scikit-learn>=1.5",
   "scipy>=1.13",
+  "statsmodels>=0.14.6",
 ]
 
 [project.optional-dependencies]
 viz = [
   "matplotlib>=3.9",
   "plotly>=5.22",
+  "seaborn>=0.13.2",
 ]
+
 portfolio = [
   "cvxpy>=1.5",
 ]
+
 dev = [
-  "blackwood[viz,portfolio]",
   "pytest>=8.2",
   "pytest-cov>=5.0",
-  "mypy>=1.10",
+  "numpy-typing>=1.0",
+  "basedpyright>=1.18",
   "ruff>=0.4",
-  "pre-commit>=3.7",
   "pandas-stubs>=2.2",
 ]
 
@@ -73,7 +76,7 @@ reportPrivateUsage = true
 [tool.ruff]
 target-version = "py313"
 line-length = 120
-src = ["src", "tests"]
+src = ["src"]
 
 [tool.ruff.lint]
 select = [
@@ -87,7 +90,7 @@ select = [
   "TCH",      # flake8-type-checking
   "RUF",      # ruff-specific
 ]
-ignore = ["ANN101", "ANN102"]
+ignore = ["ANN101", "ANN102", "ANN003", "ANN002"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["ANN"] 

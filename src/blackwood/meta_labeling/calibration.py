@@ -14,15 +14,12 @@ class ProbabilityCalibrator:
     or Ensemble, Stacking (meta-methods).
     """
 
-    VALID_BASE = {"platt", "beta", "temperature"}
-    VALID_META = {"ensemble", "stacking"}
+    VALID_BASE: frozenset[str] = frozenset({"platt", "beta", "temperature"})
+    VALID_META: frozenset[str] = frozenset({"ensemble", "stacking"})
 
     def __init__(
-        self,
-        method: str = "platt",
-        base_methods: tuple = ("platt", "beta", "temperature"),
-        verbose: bool = False,
-    ):
+        self, method: str = "platt", base_methods: tuple = ("platt", "beta", "temperature"), verbose: bool = False
+    ) -> None:
         self.method = method.lower()
         self.base_methods = base_methods
         self.verbose = verbose
@@ -52,11 +49,7 @@ class ProbabilityCalibrator:
             print(message)
 
     def fit(
-        self,
-        y_cal: np.ndarray,
-        p_cal: np.ndarray,
-        y_dev: np.ndarray | None = None,
-        p_dev: np.ndarray | None = None,
+        self, y_cal: np.ndarray, p_cal: np.ndarray, y_dev: np.ndarray | None = None, p_dev: np.ndarray | None = None
     ) -> ProbabilityCalibrator:
         """Fit calibration mapping on calibration set."""
         y_cal = np.asarray(y_cal, dtype=int).ravel()
@@ -94,7 +87,7 @@ class ProbabilityCalibrator:
 
         elif self.method == "temperature":
 
-            def nll(tlog):
+            def nll(tlog) -> float:
                 T = np.exp(tlog[0])
                 p = 1.0 / (1.0 + np.exp(-logit_p / T))
                 return log_loss(y_cal, np.clip(p, 1e-12, 1 - 1e-12))
@@ -107,11 +100,7 @@ class ProbabilityCalibrator:
         return self
 
     def _fit_meta(
-        self,
-        y_cal: np.ndarray,
-        p_cal: np.ndarray,
-        y_dev: np.ndarray | None,
-        p_dev: np.ndarray | None,
+        self, y_cal: np.ndarray, p_cal: np.ndarray, y_dev: np.ndarray | None, p_dev: np.ndarray | None
     ) -> ProbabilityCalibrator:
         """Fit meta-calibration method (ensemble or stacking)."""
         if self.method == "stacking":
@@ -138,7 +127,7 @@ class ProbabilityCalibrator:
             self.meta_model = LogisticRegression(C=1.0, solver="lbfgs", random_state=42, max_iter=1000)
             self.meta_model.fit(np.column_stack(meta_features), y_dev)
 
-            feature_names = ["original"] + list(self.base_calibrators.keys())
+            feature_names = ["original", *self.base_calibrators.keys()]
             self._log("\nLearned meta-model weights:")
             for name, w in zip(feature_names, self.meta_model.coef_[0], strict=True):
                 self._log(f"  {name:<12}: {w:+.4f}")
@@ -196,31 +185,7 @@ class ProbabilityCalibrator:
         fill_value: float = 0.0,
         time: str = "9:00",
     ) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
-        """Attach calibrated probability gate and Kelly-like bet size columns.
-
-        Parameters
-        ----------
-        df : pd.DataFrame
-            OHLC data to attach columns to.
-        probs : array-like
-            Calibrated probabilities at entry times.
-        entry_times : array-like
-            Timestamps corresponding to probability values.
-        timezone : str
-            Timezone for time snapping (e.g., 'Europe/Berlin').
-        gate_col, bet_col : str
-            Column names for gate (probability) and bet size.
-        fill_value : float
-            Fill value for unaligned bars.
-        time : str
-            Time-of-day snap (HH:MM format).
-
-        Returns
-        -------
-        tuple
-            (df_out, gate_series, bet_series)
-
-        """
+        """Attach calibrated probability gate and Kelly-like bet size columns."""
         prob_values = np.asarray(probs, dtype=np.float32).ravel()
         entry_index = pd.Index(np.asarray(entry_times))
 
@@ -319,14 +284,7 @@ class ProbabilityCalibrator:
         model,
         methods: tuple = ("platt", "beta", "temperature", "ensemble", "stacking"),
     ) -> tuple[list, str]:
-        """Select best calibration method by calibration-set Brier score.
-
-        Returns
-        -------
-        tuple
-            (scores_list, best_method_name)
-
-        """
+        """Select best calibration method by calibration-set Brier score."""
         y_cal = np.asarray(y_cal, dtype=int).ravel()
         p_cal = cls.calculate_prob_array(X_cal, model)
 

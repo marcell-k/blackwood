@@ -8,10 +8,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.pyplot import Figure
 from scipy import stats
 from scipy.cluster.hierarchy import dendrogram, fcluster, linkage
 from scipy.spatial.distance import squareform
-from sklearn.base import clone
+from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.decomposition import PCA
 from sklearn.ensemble import BaggingClassifier
 from sklearn.feature_selection import mutual_info_regression
@@ -66,7 +67,7 @@ def _slice_weights(sample_weights: pd.Series | np.ndarray | None, idx: np.ndarra
 
 
 def _score_classifier(
-    clf,
+    clf: BaseEstimator | ClassifierMixin,
     X: pd.DataFrame | np.ndarray,
     y: pd.Series | np.ndarray,
     scoring: str,
@@ -102,7 +103,7 @@ class RMTCorrelationProcessor:
     Implements Marcenko-Pastur denoising and market-mode detoning.
     """
 
-    def __init__(self, remove_market_mode: bool = True):
+    def __init__(self, remove_market_mode: bool = True) -> None:
         self.remove_market_mode = remove_market_mode
         self.mp_bounds = None
         self.n_signal_eigvals = 0
@@ -122,7 +123,7 @@ class RMTCorrelationProcessor:
 
     def _compute_score(
         self,
-        clf,
+        clf: BaseEstimator | ClassifierMixin,
         X: np.ndarray,
         y: np.ndarray,
         weights: np.ndarray | None,
@@ -131,7 +132,7 @@ class RMTCorrelationProcessor:
         """Delegate to module-level scoring function."""
         return _score_classifier(clf, X, y, scoring=scoring, sample_weight=weights)
 
-    def _create_cv_generator(self, cv: int, n_repeats: int, random_state: int | None):
+    def _create_cv_generator(self, cv: int, n_repeats: int, random_state: int | None) -> RepeatedStratifiedKFold:
         """Create RepeatedStratifiedKFold cross-validator."""
         return RepeatedStratifiedKFold(
             n_splits=cv,
@@ -148,7 +149,7 @@ class RMTCorrelationProcessor:
 
     def _compute_grouped_mda(
         self,
-        clf,
+        clf: BaseEstimator | ClassifierMixin,
         X: pd.DataFrame,
         y: pd.Series,
         group_names: list[str],
@@ -403,7 +404,7 @@ class RMTCorrelationProcessor:
         ax4.grid(alpha=0.3, axis="y")
 
         stats_text = (
-            f"Matrix: {info['T']} × {info['N']} (q={info['q']:.2f})\n"
+            f"Matrix: {info['T']} x {info['N']} (q={info['q']:.2f})\n"
             f"Signal eigenvalues: {info['n_signal_eigvals']}\n"
             f"Variance explained: {info['eigvals_denoised'][:5].sum() / info['eigvals_original'].sum():.1%}"
         )
@@ -583,7 +584,7 @@ class RMTCorrelationProcessor:
         figsize: tuple | None = None,
         mean_col: str = "mean",
         std_col: str = "std",
-    ) -> plt.Figure:
+    ) -> Figure:
         """Horizontal bar plot with error bars (Figure 6.3 style)."""
         plot_style = DEFAULT_STYLE
 
@@ -1811,11 +1812,7 @@ def _mda_fold_worker(
     n_perm: int,
     fold_seed: int,
 ) -> dict:
-    """
-    Process a single fold for MDA computation with vectorized permutation generation.
-
-    Returns dict with 'fold_idx', 'baseline_score', and 'perm_scores' (n_features,).
-    """
+    """Process a single fold for MDA computation with vectorized permutation generation."""
     X_train, y_train = X_np[train_idx], y_np[train_idx]
     X_test, y_test = X_np[test_idx], y_np[test_idx]
     w_train = _slice_weights(sample_weights, train_idx)
@@ -1834,7 +1831,7 @@ def _mda_fold_worker(
     n_test = X_test.shape[0]
     fold_rng = np.random.default_rng(fold_seed)
 
-    # Pre-generate all permutation indices at once (n_features × n_perm × n_test)
+    # Pre-generate all permutation indices at once (n_features x n_perm x n_test)
     perm_indices = np.empty((n_features, n_perm, n_test), dtype=np.intp)
     for feat_idx in range(n_features):
         for perm_i in range(n_perm):
@@ -1885,7 +1882,7 @@ class FeatureSelection:
         mda_n_perm: int = 1,
         mda_n_repeats: int = 1,
         mda_shuffle: bool = False,
-    ):
+    ) -> None:
         """Initialize FeatureSelection with validation."""
         self.n_estimators = n_estimators
         self.cv = cv
@@ -1944,7 +1941,13 @@ class FeatureSelection:
             w_test=w_test,
         )
 
-    def _fit_classifier(self, clf, X: pd.DataFrame, y: pd.Series, sample_weight: np.ndarray | None = None):
+    def _fit_classifier(
+        self,
+        clf: BaseEstimator | ClassifierMixin,
+        X: pd.DataFrame,
+        y: pd.Series,
+        sample_weight: np.ndarray | None = None,
+    ) -> None:
         clf.fit(_as_array_2d(X), _as_array_1d(y), sample_weight=sample_weight)
 
     def _compute_score(self, clf, X, y, sample_weight: np.ndarray | None = None) -> float:

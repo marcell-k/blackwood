@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import math
 import sys
-from collections.abc import Iterable
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 import pandas as pd
 
@@ -21,11 +24,11 @@ DIM = _c(2)
 
 
 # named colours (foreground)
-def fg(r, g, b):
+def fg(r: int, g: int, b: int) -> str:
     return _c(38, 2, r, g, b)
 
 
-def bg(r, g, b):
+def bg(r: int, g: int, b: int) -> str:
     return _c(48, 2, r, g, b)
 
 
@@ -107,15 +110,15 @@ def dd_color(v: float) -> str:
 # ── Formatting helpers ───────────────────────────────────────────────────────
 
 
-def fmt(v, d=2):
+def fmt(v: float | None, d: int = 2) -> str:
     if v is None or (isinstance(v, float) and math.isnan(v)):
         return "—"
     return f"{v:.{d}f}"
 
 
-def time_window(sh, sm, eh, em) -> str:
-    """Format like  1:00–11:00  or  1:30–9:30"""
-    return f"{sh}:{sm:02d}–{eh}:{em:02d}"
+def time_window(sh: int, sm: int, eh: int, em: int) -> str:
+    """Format like  1:00-11:00  or  1:30-9:30"""
+    return f"{sh}:{sm:02d}-{eh}:{em:02d}"
 
 
 # ── Column layout ────────────────────────────────────────────────────────────
@@ -138,7 +141,7 @@ def _build_cols(
     include_rrr: bool = True,
     include_portion: bool = True,
     include_nmb_c: bool = True,
-):
+) -> list[tuple[str, int, str]]:
     cols = [
         ("#", 3, "r"),
         ("Window", 20, "l"),
@@ -386,7 +389,7 @@ def render_header(cols) -> str:
     return C_DIM + "  " + RESET + "  ".join(parts)
 
 
-def render_separator(total_width: int, char="─") -> str:
+def render_separator(total_width: int, char: str = "─") -> str:
     return C_DIM + "  " + char * (total_width - 2) + RESET
 
 
@@ -403,7 +406,7 @@ def render_legend(include_train_sh: bool = False) -> str:
         f"{C_GREEN}█{RESET} score ≥0.65",
         f"{C_YELLOW}█{RESET} score ≥0.52",
         f"{C_GREY}█{RESET} score <0.52",
-        f"  OOS: {C_GREEN}+{RESET}=positive  {C_RED}−{RESET}=negative",
+        f"  OOS: {C_GREEN}+{RESET}=positive  {C_RED}-{RESET}=negative",
         f"  DD:  {C_GREEN}low{RESET}  {C_YELLOW}>15%{RESET}  {C_RED}>25%{RESET}",
     ]
     if include_train_sh:

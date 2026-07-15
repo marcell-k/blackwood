@@ -1,10 +1,14 @@
 import math
 from collections.abc import Iterable, Mapping
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
+
+type MetricValue = int | float | str | pd.Timedelta | pd.Timestamp
+type StatsData = Mapping[str, MetricValue] | pd.Series
+type TradesData = pd.DataFrame
 
 
 def merge_equity_curves(
@@ -80,16 +84,16 @@ def calculate_risk_reward_ratio(trades_df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def standard_metrics(stats, trades):
+def standard_metrics(stats: StatsData, trades: TradesData) -> tuple[float, float, float, float]:
     win_rate = round(100 * (trades.PnL > 0).sum() / len(trades), 2)
     pf_pnl = trades[trades.PnL > 0]["PnL"].sum() / -trades[trades.PnL < 0]["PnL"].sum()
     pf_return = trades[trades.PnL > 0]["ReturnPct"].sum() / -trades[trades.PnL < 0]["ReturnPct"].sum()
-    tpy = round(len(trades) / (stats["Duration"].days / 365.25), 2)
+    tpy = round(len(trades) / (cast("pd.Timedelta", stats["Duration"]).days / 365.25), 2)
     print(f"Winrate: {win_rate}% | Profit Factor: {pf_pnl:.2f}, {pf_return:.2f} | Trades per year: {tpy}")
     return win_rate, pf_pnl, pf_return, tpy
 
 
-class _Stats(pd.Series):
+class Stats(pd.Series):
     """
     Custom Series subclass for metric display with controlled formatting.
     Matches _stats.py behavior:
@@ -98,7 +102,7 @@ class _Stats(pd.Series):
     - Compact column width (max 20 chars)
     """
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         with pd.option_context(
             "display.max_colwidth",
             20,
@@ -111,7 +115,7 @@ class _Stats(pd.Series):
         ):
             return super().__repr__()
 
-    def __repr_html__(self):
+    def __repr_html__(self) -> str:
         """Override for Jupyter notebook display."""
         with pd.option_context(
             "display.max_colwidth",
@@ -123,17 +127,13 @@ class _Stats(pd.Series):
             "display.width",
             100,
         ):
-            return super().__repr_html__()
+            return str(super()._repr_html_())  # type: ignore
 
 
 def geometric_mean(returns: pd.Series) -> float:
     """Geometric mean of returns (expects decimal returns, e.g., 0.05 for 5%)."""
     # Ensure numeric dtype to prevent object-dtype ufunc errors
-    if isinstance(returns, pd.Series):
-        returns = returns.astype(np.float64, errors="ignore")
-    else:
-        returns = pd.Series(returns, dtype=np.float64)
-
+    returns = returns.astype(np.float64, errors="ignore")
     returns = returns.fillna(0) + 1
 
     if np.any(returns <= 0):
@@ -144,7 +144,7 @@ def geometric_mean(returns: pd.Series) -> float:
 
 def calculate_returns(equity: pd.Series) -> pd.Series:
     """Convert equity curve to log returns."""
-    return np.log(equity / equity.shift(1)).dropna()
+    return cast("pd.Series", np.log(equity / equity.shift(1))).dropna()
 
 
 def calculate_drawdown_series(equity: pd.Series) -> pd.Series:
@@ -155,14 +155,14 @@ def calculate_drawdown_series(equity: pd.Series) -> pd.Series:
 
 def compute_drawdown_duration_peaks(dd: pd.Series) -> tuple[pd.Series, pd.Series]:
     """Decompose drawdown series into individual episodes."""
-    iloc = np.unique(np.r_[(dd == 0).values.nonzero()[0], len(dd) - 1])
+    iloc = np.unique(np.r_[(dd == 0).to_numpy().nonzero()[0], len(dd) - 1])
     iloc = pd.Series(iloc, index=dd.index[iloc])
     df = iloc.to_frame("iloc").assign(prev=iloc.shift())
     df = df[df["iloc"] > df["prev"] + 1].astype(np.int64)
 
     if not len(df):
-        return (dd.replace(0, np.nan),) * 2
-
+        nan_dd = cast("pd.Series", dd.replace(0, np.nan))
+        return nan_dd, nan_dd
     df["duration"] = df["iloc"].map(dd.index.__getitem__) - df["prev"].map(dd.index.__getitem__)
     df["peak_dd"] = df.apply(lambda row: dd.iloc[row["prev"] : row["iloc"] + 1].max(), axis=1)
     df = df.reindex(dd.index)
@@ -211,7 +211,7 @@ def calculate_rolling_sharpe_ratio(
     equity_resampled = equity.resample("D").last().dropna()
     day_returns = equity_resampled.pct_change().dropna()
 
-    def rolling_sharpe_fn(returns_arr):
+    def rolling_sharpe_fn(returns_arr: np.ndarray) -> float:
         # Inline geometric mean: exp(mean(log(1 + r))) - 1
         returns_plus_1 = returns_arr + 1
         if np.any(returns_plus_1 <= 0):
@@ -291,29 +291,32 @@ def calculate_cvar(equity: pd.Series, confidence_level: float = 0.95) -> float:
 
 
 def compute_psr(day_returns: pd.Series, risk_free_rate: float, benchmark_sr: float = 1.0) -> float:
-    skewness = day_returns.skew()
-    kurtosis = day_returns.kurt() + 3
-    day_returns_mean = day_returns.mean()
-    day_returns_std = day_returns.std(ddof=1)
+    skewness = cast("float", day_returns.skew())
+    kurtosis = cast("float", day_returns.kurt()) + 3
+    day_returns_mean = float(day_returns.mean())
+    day_returns_std = float(day_returns.std(ddof=1))
+
     observed_sr = (day_returns_mean - risk_free_rate) / (day_returns_std or np.nan)
     n_samples = len(day_returns.dropna())
 
-    variance_adjustment = 1 - skewness * observed_sr + ((kurtosis - 1) / 4) * observed_sr**2
+    variance_adjustment: float = 1 - skewness * observed_sr + ((kurtosis - 1) / 4) * observed_sr**2
     sr_variance = variance_adjustment / (n_samples - 1)
     if sr_variance <= 0:
         return np.nan
 
     sr_std = np.sqrt(sr_variance)
     test_statistic = (observed_sr - benchmark_sr) / sr_std
-    psr = norm.cdf(test_statistic)
+
+    psr = float(norm.cdf(test_statistic))
     return psr
 
 
 def compute_min_trl(
     day_returns: pd.Series, risk_free_rate: float, alpha: float = 0.05, benchmark_sr: float = 1.0
 ) -> float:
-    skewness = day_returns.skew()
-    kurtosis = day_returns.kurt() + 3
+    skewness = cast("float", day_returns.skew())
+    kurtosis = cast("float", day_returns.kurt()) + 3
+
     day_returns_mean = day_returns.mean()
     day_returns_std = day_returns.std(ddof=1)
     observed_sr = (day_returns_mean - risk_free_rate) / (day_returns_std or np.nan)
@@ -381,24 +384,9 @@ def compute_all_metrics(
     pnl: np.ndarray | None = None,
     returns_pct: np.ndarray | None = None,
     benchmark_sharpe: float = 2.0,  # Annualized benchmark for PSR/MinTRL
-) -> _Stats:
-    """
-    Compute comprehensive metrics (matches _stats.py output).
-
-    Returns _Stats object with custom display formatting (5 decimal precision).
-
-    Args:
-        equity: Equity curve (pd.Series with DatetimeIndex)
-        risk_free_rate: Risk-free rate (default 0%)
-        annual_trading_days: Trading days per year (default 252)
-        pnl: Trade P&L array (optional)
-        returns_pct: Trade returns array (optional)
-
-    Returns:
-        _Stats object (custom pd.Series with formatting)
-
-    """
-    s = _Stats(dtype=object)
+) -> Stats:
+    """Compute comprehensive metrics (matches _stats.py output)."""
+    s = Stats(dtype=object)
 
     start_ts = equity.index[0]
     end_ts = equity.index[-1]
@@ -470,15 +458,15 @@ def compute_all_metrics(
         s.loc["Avg. Loss [%]"] = trade_metrics["avg_loss_pct"]
         s.loc["Profit Factor"] = trade_metrics["profit_factor"]
 
-    return s
+    return cast("Stats", s)
 
 
-def compute_trades_metrics(trades):
+def compute_trades_metrics(trades: TradesData) -> pd.Series:
     returns = trades["ReturnPct"]
     pl = trades["PnL"]
     rrr = trades["RiskRewardRatio"]
     n_trades = trades.shape[0]
-    s = _Stats(dtype=object)
+    s = Stats(dtype=object)
 
     s.loc["Profit Factor"] = returns[returns > 0].sum() / (abs(returns[returns < 0].sum()) or np.nan)
     win_rate = np.nan if not n_trades else (pl > 0).mean()
@@ -496,6 +484,8 @@ def compute_sr_max(n_trials: int, trials_variance: float | None = None) -> float
 
     expected_max_z = (1.0 - gamma_euler) * z_1 + gamma_euler * z_2
 
+    if trials_variance is None:
+        return np.nan
     sr_max = np.sqrt(trials_variance) * expected_max_z
 
     return sr_max
@@ -521,8 +511,8 @@ def compute_dsr(
 
     sr_max = benchmark_sr + compute_sr_max(n_trials, trials_variance)
 
-    skewness = day_returns_clean.skew()
-    kurtosis = day_returns_clean.kurt() + 3.0
+    skewness = cast("float", day_returns_clean.skew())
+    kurtosis = cast("float", day_returns_clean.kurt()) + 3.0
     variance_adjustment = 1.0 - skewness * observed_sr + ((kurtosis - 1.0) / 4.0) * (observed_sr**2)
     sr_variance = variance_adjustment / (n_samples - 1)
 
@@ -531,5 +521,5 @@ def compute_dsr(
 
     sr_std = np.sqrt(sr_variance)
     test_statistic = (observed_sr - sr_max) / sr_std
-    dsr = norm.cdf(test_statistic)
+    dsr = cast("float", norm.cdf(test_statistic))
     return dsr

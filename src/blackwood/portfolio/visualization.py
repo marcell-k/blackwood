@@ -934,9 +934,6 @@ class PortfolioVisualizer:
             3. Histogram of maximum drawdowns (log frequency)
             4. Histogram of average drawdowns (log frequency)
         """
-        # ------------------------------------------------------------------
-        # Percentile calculations
-        # ------------------------------------------------------------------
         equity_p05 = np.percentile(mc_results.simulated_equity, 5, axis=0)
         equity_p25 = np.percentile(mc_results.simulated_equity, 25, axis=0)
         equity_p50 = np.percentile(mc_results.simulated_equity, 50, axis=0)
@@ -959,16 +956,12 @@ class PortfolioVisualizer:
         actual_dd = self._calculate_drawdown(mc_results.actual_equity).values
         dates = mc_results.dates
 
-        # ------------------------------------------------------------------
         # Figure layout
-        # ------------------------------------------------------------------
         fig, axes = plt.subplots(2, 2, figsize=(16, 10))
         ax_eq, ax_dd = axes[0]
         ax_maxdd, ax_avgdd = axes[1]
 
-        # ------------------------------------------------------------------
         # Panel 1: Equity curves
-        # ------------------------------------------------------------------
         ax_eq.fill_between(dates, equity_p05, equity_p95, alpha=0.15, label="5–95%", color=DEFAULT_STYLE.accent1)
         ax_eq.fill_between(dates, equity_p25, equity_p75, alpha=0.30, label="25–75%", color=DEFAULT_STYLE.accent1)
 
@@ -983,9 +976,7 @@ class PortfolioVisualizer:
         ax_eq.set_ylabel("Equity ($)")
         ax_eq.legend(frameon=False)
 
-        # ------------------------------------------------------------------
         # Panel 2: Drawdown curves
-        # ------------------------------------------------------------------
         ax_dd.fill_between(dates, dd_p05, dd_p95, alpha=0.15, color=DEFAULT_STYLE.accent5)
         ax_dd.fill_between(dates, dd_p25, dd_p75, alpha=0.30, color=DEFAULT_STYLE.accent5)
 
@@ -996,9 +987,7 @@ class PortfolioVisualizer:
         ax_dd.set_xlabel("Date")
         ax_dd.set_ylabel("Drawdown (%)")
 
-        # ------------------------------------------------------------------
         # Panel 3: Maximum drawdown histogram
-        # ------------------------------------------------------------------
         ax_maxdd.hist(mc_results.simulated_max_dd, bins=50, log=True, alpha=0.85, color=DEFAULT_STYLE.accent4)
 
         ax_maxdd.axvline(
@@ -1025,9 +1014,7 @@ class PortfolioVisualizer:
         ax_maxdd.set_xlabel("Maximum Drawdown (%)")
         ax_maxdd.set_ylabel("Frequency")
 
-        # ------------------------------------------------------------------
         # Panel 4: Average drawdown histogram
-        # ------------------------------------------------------------------
         ax_avgdd.hist(
             mc_results.simulated_avg_dd,
             bins=50,
@@ -1060,10 +1047,8 @@ class PortfolioVisualizer:
         ax_avgdd.set_xlabel("Average Drawdown (%)")
         ax_avgdd.set_ylabel("Frequency")
 
-        # ------------------------------------------------------------------
         # Final layout
-        # ------------------------------------------------------------------
         fig.suptitle("Monte Carlo Drawdown Analysis", fontsize=20, color=DEFAULT_STYLE.font_color)
-        fig.tight_layout(rect=[0, 0, 1, 0.96])
+        fig.tight_layout(rect=(0, 0, 1, 0.96))
         DEFAULT_STYLE.apply_mpl(fig)
         return fig

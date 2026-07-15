@@ -2033,7 +2033,7 @@ class OptimalFCalculator(OptimizationStrategy):
 
             w_vals = window.to_numpy()
 
-            # ---- Fit Student-t --------------------------------------------------
+            # ---- Fit Student-t -----
             mu_norm = np.mean(w_vals)
             sigma_norm = np.std(w_vals, ddof=1)
 
@@ -2049,7 +2049,7 @@ class OptimalFCalculator(OptimizationStrategy):
                     print(f"Skipping {d}: df={df_t:.2f} <= {min_df}")
                 continue
 
-            # ---- Sigma bounds --------------------------------------------------
+            # ---- Sigma bounds ----
             try:
                 z_min = self._calculate_std_away(w_vals.min(), df_t, loc_t, scale_t)
                 z_max = self._calculate_std_away(w_vals.max(), df_t, loc_t, scale_t)
@@ -2063,7 +2063,7 @@ class OptimalFCalculator(OptimizationStrategy):
                 window_sigma_bounds[0] += sigma_bounds_margin[0]
                 window_sigma_bounds[1] += sigma_bounds_margin[1]
 
-            # ---- Optimal-f Monte Carlo -----------------------------------------
+            # ---- Optimal-f Monte Carlo ----
             try:
                 rng = np.random.default_rng(42)
                 t_samples = rng.standard_t(df_t, size=n_mc)

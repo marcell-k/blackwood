@@ -32,12 +32,12 @@ RF_FEATURES = [
 class RegimeDetector:
     def __init__(
         self,
-        gmm_features=GMM_FEATURES,
-        rf_features=RF_FEATURES,
+        gmm_features: list[str] = GMM_FEATURES,
+        rf_features: list[str] = RF_FEATURES,
         n_components: int = 3,
         confidence_threshold: float = 0.6,
         random_state: int = RANDOM_STATE,
-    ):
+    ) -> None:
         self.gmm_features = gmm_features
         self.rf_features = rf_features
         self.n_components = n_components
@@ -151,7 +151,7 @@ class RegimeDetector:
         X_input = np.hstack([ohe, rf_features])
         return int(self.rf.predict(X_input[None, :])[0])
 
-    def print_diagnostics(self):
+    def print_diagnostics(self) -> None:
         pred = self.rf.predict(self._transition_X)
         print("RF confusion matrix:")
         print(confusion_matrix(self._transition_y, pred))
@@ -174,16 +174,7 @@ def fit_and_label_regimes(
     verbose: bool = True,
     **detector_kwargs,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Fit regime detector on train data and label both train and OOS with forward regimes.
-
-    Parameters
-    ----------
-    features_to_exclude : list[str] | None
-        Feature names to drop before fitting (e.g. from PCA/RMT analysis)
-    verbose : bool
-        If True, print diagnostics and show regime plots
-    """
+    """Fit regime detector on train data and label both train and OOS with forward regimes."""
     if timeframes is None:
         timeframes = ["15min", "1h", "4h"]
 

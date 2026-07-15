@@ -4,7 +4,6 @@ import hashlib
 import os
 import re
 import tempfile
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -25,14 +24,11 @@ from blackwood.config import CASH, MARGIN, RANDOM_STATE, SPLIT_TIME
 from blackwood.data.splitters import CPCVSplitter
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from matplotlib.figure import Figure
 
 _FOLD_COL_RE = re.compile(r"^fold_(\d+)_(\d+)_sharpe$")
-
-
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
 
 
 def _get_plotting_tools(force_agg: bool = False):
@@ -223,9 +219,7 @@ def _interpret_param_spec(spec: Any) -> dict[str, Any]:
     return {"kind": "unknown"}
 
 
-# ---------------------------------------------------------------------------
-# Config / result containers
-# ---------------------------------------------------------------------------
+# ---- Config / result containers ----
 
 
 @dataclass
@@ -268,7 +262,7 @@ class StabilityConfig:
     tier2_score: float = 0.6
     tier3_score: float = 0.4
     quick_mode: bool = False
-    cash: int = CASH
+    cash: float = CASH
     spread: float = 0
     commission: tuple = (0, 0)
     margin: float = MARGIN
@@ -283,15 +277,10 @@ class PhaseResult:
     passed: bool = True
 
 
-# ---------------------------------------------------------------------------
-# BacktestRunner
-# ---------------------------------------------------------------------------
-
-
 class BacktestRunner:
     """Centralized Backtesting.py runner configured by StabilityConfig."""
 
-    def __init__(self, config: StabilityConfig):
+    def __init__(self, config: StabilityConfig) -> None:
         self.config = config
 
     def _make_dynamic_strategy(self, base_cls: type[Strategy], params: dict[str, Any]) -> type[Strategy]:
@@ -312,15 +301,10 @@ class BacktestRunner:
         return bt.run()
 
 
-# ---------------------------------------------------------------------------
-# ParameterPerturber
-# ---------------------------------------------------------------------------
-
-
 class ParameterPerturber:
     """Generate bounded parameter perturbations based on param_space semantics."""
 
-    def __init__(self, config: StabilityConfig, param_space: dict[str, Any] | None = None):
+    def __init__(self, config: StabilityConfig, param_space: dict[str, Any] | None = None) -> None:
         self.config = config
         self.param_space = param_space or {}
 
@@ -356,15 +340,10 @@ class ParameterPerturber:
         return out
 
 
-# ---------------------------------------------------------------------------
-# DualFilterSelector
-# ---------------------------------------------------------------------------
-
-
 class DualFilterSelector:
     """Phase 2: Performance, stability, and consistency filters with proximity-based stability."""
 
-    def __init__(self, config: StabilityConfig, param_space: dict):
+    def __init__(self, config: StabilityConfig, param_space: dict) -> None:
         self.config = config
         self.param_space = param_space
 
@@ -524,15 +503,10 @@ class DualFilterSelector:
         return top_n_df, filter_counts
 
 
-# ---------------------------------------------------------------------------
-# PnLBootstrapValidator
-# ---------------------------------------------------------------------------
-
-
 class PnLBootstrapValidator:
     """Phase 3: PnL-space bootstrap analysis for robustness validation."""
 
-    def __init__(self, config: StabilityConfig, param_space: dict[str, Any]):
+    def __init__(self, config: StabilityConfig, param_space: dict[str, Any]) -> None:
         self.config = config
         self.param_space = param_space
         self.runner = BacktestRunner(config)
@@ -751,15 +725,13 @@ class PnLBootstrapValidator:
 
     @staticmethod
     def _compute_batch_metrics(
-        log_returns_batch: np.ndarray,
-        equity_batch: np.ndarray,
-        annual_days: int = 252,
+        log_returns_batch: np.ndarray, equity_batch: np.ndarray, annual_days: int = 252
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Annualized Sharpe and Calmar for a batch of bootstrap paths.
 
         Annualized variance via exact moment formula:
-          Var = E[X²]^n − E[X]^{2n},  X = (1 + r_t),  n = annual_days
+          Var = E[X²]^n - E[X]^{2n},  X = (1 + r_t),  n = annual_days
         """
         pct_ret = np.expm1(log_returns_batch)
         gmean = np.expm1(log_returns_batch.mean(axis=1))
@@ -820,7 +792,7 @@ def _cpcv_path_worker(
         tqdm(folds, desc=f"Path {path_id}", unit="fold", position=1, leave=False)
     ):
 
-        def bt_func_train(df=train_df, **params):
+        def bt_func_train(df: pd.DataFrame = train_df, **params):
             return runner.run(df, strategy_class, params)
 
         optimizer = OptunaOptimizer(bt_func=bt_func_train)
@@ -866,15 +838,10 @@ def _cpcv_path_worker(
     return all_param_results
 
 
-# ---------------------------------------------------------------------------
-# OOSValidator
-# ---------------------------------------------------------------------------
-
-
 class OOSValidator:
     """Phase 4: Out-of-sample validation on holdout data."""
 
-    def __init__(self, config: StabilityConfig, param_space: dict[str, Any]):
+    def __init__(self, config: StabilityConfig, param_space: dict[str, Any]) -> None:
         self.config = config
         self.param_space = param_space
         self.runner = BacktestRunner(config)
@@ -1017,11 +984,6 @@ class OOSValidator:
         return pd.DataFrame(results)
 
 
-# ---------------------------------------------------------------------------
-# TierClassifier
-# ---------------------------------------------------------------------------
-
-
 class TierClassifier:
     """
     Phase 5: Multi-criteria ranking and tier assignment.
@@ -1033,7 +995,7 @@ class TierClassifier:
     - Hard `pass_*` filters act as gates only.
     """
 
-    def __init__(self, config: StabilityConfig, param_space: dict[str, Any]):
+    def __init__(self, config: StabilityConfig, param_space: dict[str, Any]) -> None:
         self.config = config
         self.param_space = param_space
 
@@ -1159,11 +1121,6 @@ class TierClassifier:
         return df
 
 
-# ---------------------------------------------------------------------------
-# ParameterStabilityPipeline
-# ---------------------------------------------------------------------------
-
-
 class ParameterStabilityPipeline:
     """
     5-Phase parameter stability testing pipeline.
@@ -1183,7 +1140,7 @@ class ParameterStabilityPipeline:
         n_cpcv_trials: int = 100,
         n_bootstrap: int = 1000,
         config: StabilityConfig | None = None,
-    ):
+    ) -> None:
         self.strategy_class = strategy_class
         self.param_space = param_space
         self.constraints = constraints
@@ -1328,7 +1285,7 @@ class ParameterStabilityPipeline:
                 arr = arr[np.isfinite(arr)]
                 metrics[metric_name] = arr
 
-            def _safe_stat(arr, fn):
+            def _safe_stat(arr, fn: Callable) -> float:
                 return float(fn(arr)) if len(arr) else np.nan
 
             sharpe_arr = metrics["sharpe"]
@@ -1404,7 +1361,7 @@ class ParameterStabilityPipeline:
         validator = PnLBootstrapValidator(self.config, param_space=self.param_space)
         if verbose:
             n_iter = 100 if self.config.quick_mode else self.config.n_bootstrap
-            print(f" {n_iter} bootstrap iterations × {len(filtered_df)} candidates")
+            print(f" {n_iter} bootstrap iterations * {len(filtered_df)} candidates")
         bootstrap_df = validator.validate_parameters(
             param_sets=filtered_df, train_df=self._train_df, strategy_class=self.strategy_class
         )
@@ -1459,7 +1416,7 @@ class ParameterStabilityPipeline:
             passed=True,
         )
 
-    def _print_final_summary(self):
+    def _print_final_summary(self) -> None:
         if self._final_ranking is None or self._final_ranking.empty:
             print("\nNo parameter sets passed all phases.")
             return
@@ -1523,10 +1480,6 @@ class ParameterStabilityPipeline:
         if verbose:
             print(f" Added full-train Sharpe for top {top_n_int} candidates ({success}/{top_n_int} successful).")
         return enriched
-
-    # ------------------------------------------------------------------
-    # Plotting
-    # ------------------------------------------------------------------
 
     def plot_filter_funnel(self, show: bool = True) -> Figure:
         plt, sty = _get_plotting_tools(force_agg=not show)

@@ -12,7 +12,7 @@ from blackwood.visualization.style import DEFAULT_STYLE
 class PermutationPlotter:
     """Permutation test visualization with PlotStyle theming."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.style = DEFAULT_STYLE
 
     @staticmethod
@@ -117,7 +117,7 @@ class PermutationPlotter:
         self,
         fold_results: list[dict[str, Any]],
         fold_idx: int = 0,
-        metrics: list[str] = None,
+        metrics: list[str] | None = None,
         width: int = 1000,
         height: int = 300,
     ) -> None:

@@ -22,7 +22,7 @@ class PortfolioBacktester:
         use_optimal_f_for_ensemble: bool = True,
         central_allocator: CentralRiskAllocator | None = None,
         allocator_freq: str = "W-FRI",
-    ):
+    ) -> None:
         self.strategy = strategy
         self.target_vol = target_vol
         self.apply_leverage = apply_leverage
@@ -249,8 +249,6 @@ class PortfolioBacktester:
 
         Returns a 7-tuple (weights, base_weights, scale_factors, leverage,
         leverage_entry, audit_entry, weights_updated), or None if no usable data.
-        When no active strategies, weights/leverage fields are None but audit_entry
-        is still populated.
         """
         lookback_vals = []
         for s in strategies_rebalancing_today:
@@ -923,7 +921,7 @@ class PortfolioBacktester:
 
 
 class PortfolioMetrics:
-    def __init__(self, all_results: dict, returns: pd.DataFrame):
+    def __init__(self, all_results: dict, returns: pd.DataFrame) -> None:
         self.all_results = all_results
         self.returns = returns
 
@@ -938,7 +936,7 @@ class PortfolioMetrics:
         metrics_df = pd.DataFrame(metrics_list).set_index("Strategy")
         return metrics_df
 
-    def print_metrics(self, metrics_df: pd.DataFrame):
+    def print_metrics(self, metrics_df: pd.DataFrame) -> None:
         print(f"\n{'=' * 80}")
         print("ALL STRATEGIES - PERFORMANCE METRICS")
         print(f"{'=' * 80}")
@@ -952,7 +950,7 @@ class PortfolioMetrics:
         )
         print(ranked.round(6).to_string())
 
-    def print_equity_comparison(self):
+    def print_equity_comparison(self) -> None:
         print(f"\n{'=' * 80}")
         print("EQUITY CURVE STATISTICS")
         print(f"{'=' * 80}")
@@ -991,7 +989,7 @@ class PortfolioMetrics:
 
         return final_alloc_df
 
-    def print_allocation_history(self, strategy_name: str):
+    def print_allocation_history(self, strategy_name: str) -> None:
         weights_df = self.all_results[strategy_name]["results"]["weights_history"]
 
         print(f"\n{'=' * 80}")
@@ -1000,7 +998,7 @@ class PortfolioMetrics:
         print(f"Total Rebalances: {len(weights_df)}")
         print(f"\n{weights_df.round(4).to_string()}")
 
-    def print_all_allocation_history(self):
+    def print_all_allocation_history(self) -> None:
         for strategy_name in self.all_results:
             self.print_allocation_history(strategy_name)
 
@@ -1020,7 +1018,7 @@ class PortfolioMetrics:
 
         return portfolio_equity
 
-    def export_metrics_csv(self, metrics_df: pd.DataFrame, output_path: str = "portfolio_metrics.csv"):
+    def export_metrics_csv(self, metrics_df: pd.DataFrame, output_path: str = "portfolio_metrics.csv") -> None:
         metrics_df.to_csv(output_path)
         print(f"Metrics exported to: {output_path}")
 
@@ -1044,28 +1042,9 @@ class PortfolioMetrics:
     def get_performance_metrics(
         self, results: dict, risk_free_rate: float = 0.0, annual_trading_days: int = 252
     ) -> dict[str, float]:
-        """
-        Calculate comprehensive performance metrics using analytics.py.
-
-        Uses compute_all_metrics() for consistency with _stats.py formulas.
-        Returns only the numeric metrics (not time/equity values for brevity).
-
-        Args:
-            results: Backtest results dict with keys: equity, daily_returns, etc.
-            risk_free_rate: Risk-free rate for Sharpe/Sortino (default 0%)
-            annual_trading_days: Trading days per year (default 252)
-
-        Returns:
-            dict with keys: annualized_return, annualized_volatility, sharpe_ratio,
-                            sortino_ratio, calmar_ratio, max_drawdown, etc.
-
-        Assumptions:
-            - results['equity'] has DatetimeIndex and is sorted
-            - No NaN at start of equity curve
-
-        """
+        """Calculate comprehensive performance metrics using analytics.py."""
         equity = results["equity"]
-        annualization_factor = int(round(float(results.get("annualization_factor", annual_trading_days))))
+        annualization_factor = round(float(results.get("annualization_factor", annual_trading_days)))
 
         # Compute all metrics via analytics
         metrics_series = compute_all_metrics(

@@ -10,7 +10,7 @@ class BaseTemplateStrategy(Strategy):
     drawdown_scale_threshold = 0.05  # Scale down at 5% drawdown
     drawdown_scale_factor = 0.5  # Reduce size by 50%
 
-    def init(self):
+    def __init__(self) -> None:
         """Initialize strategy - override this method in subclass"""
         super().init()
 
@@ -28,7 +28,7 @@ class BaseTemplateStrategy(Strategy):
         else:
             return 0.0
 
-    def _calculate_size(self, sl: float):
+    def _calculate_size(self, sl: float) -> int:
         """Calculate total position size for all 3 positions combined."""
         base_risk_amount = self.equity * 0.01
         max_risk = self.equity * 0.01
@@ -43,7 +43,7 @@ class BaseTemplateStrategy(Strategy):
         risk_amount = int(risk_amount / sl)
         return risk_amount
 
-    def next(self):
+    def next(self) -> None:
         pass
 
 
@@ -55,7 +55,7 @@ class MetaLabeling(BaseTemplateStrategy):
 
     use_kelly_sizing = False
 
-    def init(self):
+    def __init__(self) -> None:
         """Initialize strategy - override this method in subclass"""
         super().init()
 
@@ -66,28 +66,28 @@ class MetaLabeling(BaseTemplateStrategy):
         if self.bet_col is not None:
             self._bet = self.I(lambda: self.data.df[self.bet_col].values.astype(float), plot=False)
 
-    def _gate_allows_long(self):
+    def _gate_allows_long(self) -> bool:
         if self.gate_col is None:
             return True
         val = self._gate[-1]
         return np.isfinite(val) and (val >= self.gate_min_long)
 
-    def _gate_allows_short(self):
+    def _gate_allows_short(self) -> bool:
         if self.gate_col is None:
             return True
         val = self._gate[-1]
         return np.isfinite(val) and (val >= self.gate_min_short)
 
-    def next(self):
+    def next(self) -> None:
         pass
 
 
 class BuyAndHoldStrategy(Strategy):
-    def init(self):
+    def __init__(self) -> None:
         """Initialize strategy - no indicators needed for Buy & Hold"""
         pass
 
-    def next(self):
+    def next(self) -> None:
         """Execute strategy logic on each bar"""
         # Enter long position on first opportunity if not already positioned
         if not self.position:

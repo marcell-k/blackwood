@@ -51,7 +51,7 @@ def resample_all_results(all_results: dict, resample: bool = True, rule: str = "
                 from blackwood.portfolio.core import PortfolioBacktester
 
                 results["annualization_factor"] = max(
-                    1, int(round(PortfolioBacktester._infer_annualization_factor(equity_daily.index)))
+                    1, round(PortfolioBacktester._infer_annualization_factor(equity_daily.index))
                 )
 
         for df_key in ("weights_history", "leverage_history_df", "allocator_history_df", "risk_rules_audit_df"):
