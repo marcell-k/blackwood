@@ -74,7 +74,7 @@ class MonthWalkForwardSplitter:
         m = idx.month
         y0 = int(y.min())
         g = (y - y0) * 12 + m
-        return g.astype(np.int32), int(g.min()), int(g.max())
+        return g.to_numpy(dtype=np.int32), int(g.min()), int(g.max())
 
     @staticmethod
     def _mask_by_month_range(gcodes: np.ndarray, start_m: int, end_m: int) -> np.ndarray:
@@ -137,7 +137,7 @@ class MonthWalkForwardSplitter:
         return train_dfs, test_dfs, latest_df
 
     @staticmethod
-    def print_train_test_periods(train_dfs, test_dfs) -> None:
+    def print_train_test_periods(train_dfs: list[pd.DataFrame], test_dfs: list[pd.DataFrame]) -> None:
         print(f"Number of train-test splits: {len(train_dfs)}")
         for i, (tr, te) in enumerate(zip(train_dfs, test_dfs, strict=True), 1):
             if len(tr) == 0 or len(te) == 0:
@@ -248,10 +248,13 @@ class CPCVSplitter:
         month_start = pd.Timestamp(year=min_date.year, month=min_date.month, day=1, tz=tz)
         starts, ends = [], []
         current = month_start
-        while current + relativedelta(months=self.test_months) <= max_date:
+        test_months = self.test_months
+        if test_months is None:
+            raise ValueError("test_months must not be None")
+        while current + relativedelta(months=test_months) <= max_date:
             starts.append(current)
-            ends.append(current + relativedelta(months=self.test_months))
-            current = current + relativedelta(months=self.test_months)
+            ends.append(current + relativedelta(months=test_months))
+            current = current + relativedelta(months=test_months)
         return starts, ends
 
     @staticmethod
@@ -479,7 +482,9 @@ class CPCVSplitter:
         }
         legend_added = set()
 
-        def add_segment(y, x0, x1, color, name, dash=None, width=6):
+        def add_segment(
+            y: int, x0: pd.Timestamp, x1: pd.Timestamp, color: str, name: str, dash: str | None = None, width: int = 6
+        ) -> None:
             if x0 >= x1:
                 return
             show = name not in legend_added
@@ -537,14 +542,18 @@ class CPCVSplitter:
                     purge_before = test_start - purge_delta
                     add_segment(p, purge_before, test_start, colors["Purge"], "Purge", dash="dash", width=4)
                 add_segment(p, test_start, test_end, colors["Test"], "Test", dash=None, width=6)
+                purge_after = test_end + purge_delta if self.purged_weeks > 0 else test_end
+                if self.purged_weeks > 0 and not is_prev_adjacent:
+                    purge_before = test_start - purge_delta
+                    add_segment(p, purge_before, test_start, colors["Purge"], "Purge", dash="dash", width=4)
+                add_segment(p, test_start, test_end, colors["Test"], "Test", dash=None, width=6)
                 if self.purged_weeks > 0 and not is_next_adjacent:
-                    purge_after = test_end + purge_delta
                     add_segment(p, test_end, purge_after, colors["Purge"], "Purge", dash="dash", width=4)
                 if self.embargo_weeks > 0 and not is_next_adjacent:
-                    embargo_end = purge_after + embargo_delta if self.purged_weeks > 0 else test_end + embargo_delta
+                    embargo_end = purge_after + embargo_delta
                     add_segment(
                         p,
-                        max(test_end, purge_after if self.purged_weeks > 0 else test_end),
+                        purge_after,
                         embargo_end,
                         colors["Embargo"],
                         "Embargo",
@@ -579,7 +588,7 @@ class CPCVSplitter:
         fig.show()
 
     def get_train_test_for_path(
-        self, df: pd.DataFrame, paths: dict[int, list[tuple[pd.DataFrame, pd.DataFrame]]], path_id: int
+        self, paths: dict[int, list[tuple[pd.DataFrame, pd.DataFrame]]], path_id: int
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         if path_id not in paths:
             raise ValueError(f"Path ID {path_id} not found in paths dictionary.")

@@ -1,3 +1,5 @@
+from typing import cast
+
 import numpy as np
 import pandas as pd
 
@@ -13,13 +15,13 @@ class OHLCBootstrap:
 
     def __init__(
         self, method: str = "stationary_block", avg_block_length: int | None = None, seed: int | None = RANDOM_STATE
-    ):
+    ) -> None:
         self.method = method.lower()
         self.avg_block_length = avg_block_length
         self._rng = np.random.default_rng(seed)
 
     def generate(self, ohlc: pd.DataFrame, train_window: int | None = None) -> pd.DataFrame:
-        time_index = ohlc.index
+        time_index = cast("pd.DatetimeIndex", ohlc.index)
         n_bars = len(time_index)
         perm_n = n_bars if train_window is None else min(train_window, n_bars)
         if train_window and train_window > n_bars:
@@ -31,18 +33,12 @@ class OHLCBootstrap:
         train_index = time_index[:perm_n]
         start_log = log_train[0, :]
 
-        (rel_open, rel_h, rel_l, rel_c, overnight_pos, intraday_pos) = self._compute_relatives(
-            log_train, train_index, perm_n
-        )
+        (rel_open, rel_h, rel_l, rel_c, overnight_pos) = self._compute_relatives(log_train, train_index, perm_n)
 
         if self.method == "permutation":
-            synthetic_log = self._generate_permutation(
-                start_log, rel_open, rel_h, rel_l, rel_c, overnight_pos, intraday_pos, perm_n
-            )
+            synthetic_log = self._generate_permutation(start_log, rel_open, rel_h, rel_l, rel_c, overnight_pos, perm_n)
         else:
-            synthetic_log = self._generate_stationary_block(
-                start_log, rel_open, rel_h, rel_l, rel_c, overnight_pos, intraday_pos, perm_n, log_train
-            )
+            synthetic_log = self._generate_stationary_block(start_log, rel_open, rel_h, rel_l, rel_c, perm_n, log_train)
 
         full_log = synthetic_log if perm_n == n_bars else np.concatenate((synthetic_log, log_ohlc[perm_n:, :]), axis=0)
         prices = np.exp(full_log)
@@ -105,7 +101,16 @@ class OHLCBootstrap:
         log_ohlc = np.stack((log_open, log_high, log_low, log_close), axis=-1)
         return log_ohlc
 
-    def _generate_permutation(self, start_log, rel_open, rel_h, rel_l, rel_c, overnight_pos, intraday_pos, perm_n):
+    def _generate_permutation(
+        self,
+        start_log: np.ndarray,
+        rel_open: np.ndarray,
+        rel_h: np.ndarray,
+        rel_l: np.ndarray,
+        rel_c: np.ndarray,
+        overnight_pos: np.ndarray,
+        perm_n: int,
+    ) -> np.ndarray:
         if perm_n > 1:
             perm = self._rng.permutation(perm_n)
             rel_h = rel_h[perm]
@@ -122,8 +127,15 @@ class OHLCBootstrap:
         return synthetic_log
 
     def _generate_stationary_block(
-        self, start_log, rel_open, rel_h, rel_l, rel_c, overnight_pos, intraday_pos, perm_n, log_train
-    ):
+        self,
+        start_log: np.ndarray,
+        rel_open: np.ndarray,
+        rel_h: np.ndarray,
+        rel_l: np.ndarray,
+        rel_c: np.ndarray,
+        perm_n: int,
+        log_train: np.ndarray,
+    ) -> np.ndarray:
         if self.avg_block_length is None:
             log_c = log_train[:, 3]
             if perm_n > 1:
@@ -176,7 +188,7 @@ class OHLCBootstrap:
 
         return resampled
 
-    def _build_dataframe(self, prices: np.ndarray, time_index, orig: pd.DataFrame):
+    def _build_dataframe(self, prices: np.ndarray, time_index: pd.Index, orig: pd.DataFrame) -> pd.DataFrame:
         df = pd.DataFrame(prices, index=time_index, columns=["Open", "High", "Low", "Close"])
         for col in orig.columns:
             if col not in {"Open", "High", "Low", "Close"}:
