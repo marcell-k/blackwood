@@ -68,4 +68,7 @@ include = ["src"]
 typeCheckingMode = "standard"
 
 [tool.pytest.ini_options]
-testpaths = ["src"]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/blackwood"]

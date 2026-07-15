@@ -30,8 +30,8 @@ cp .env.example .env
 **Lint and format:**
 
 ```bash
-uv run ruff check src/
-uv run ruff format src/
+uv run ruff check src/blackwood/
+uv run ruff format src/blackwood/
 ```
 
 **Type-check:**
