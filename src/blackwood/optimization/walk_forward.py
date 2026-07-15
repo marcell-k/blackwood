@@ -1,15 +1,20 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
-from backtesting import Backtest, Strategy
 
 from blackwood.config import CASH, IS_MONTHS, MARGIN, OOS_MONTHS
 from blackwood.data.splitters import CPCVSplitter
 from blackwood.optimization.optimization import SamboOptimizer
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from backtesting import Backtest, Strategy
+
+    from blackwood.metrics.core import Stats
 
 
 class WalkForwardOptimizer:
@@ -59,7 +64,7 @@ class WalkForwardOptimizer:
         )
 
     @staticmethod
-    def _trades_df(stats: Any) -> pd.DataFrame:
+    def _trades_df(stats: Stats) -> pd.DataFrame:
         if isinstance(stats, dict) and "_trades" in stats:
             return stats["_trades"].copy()
         return getattr(stats, "_trades", pd.DataFrame())
@@ -431,7 +436,7 @@ class CPCVAnalyzer:
         trade_on_close: bool = True,
         exclusive_orders: bool = False,
         initial_cash: float = CASH,
-    ):
+    ) -> None:
         self.splitter = splitter
         self.base_strategy = base_strategy
         self.maximize = maximize
@@ -613,8 +618,8 @@ class CPCVAnalyzer:
                 stats_test_list,
                 parameters,
                 bt_test_list,
-                param_names,
-                optimize_results,
+                _,  # param_names
+                _,  # optimize_results
             ) = wfo.run_wfo(
                 base_strategy=self.base_strategy,
                 params=None,

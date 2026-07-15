@@ -20,7 +20,9 @@ class PermutationWalkForwardTester:
     Supports multiple metrics and augments with Neyman-Pearson LRT p-values per metric.
     """
 
-    def __init__(self, optimizer: Any, cash: float = CASH, commission: tuple | None = None, spread: float = 0.0):
+    def __init__(
+        self, optimizer: Any, cash: float = CASH, commission: tuple | None = None, spread: float = 0.0
+    ) -> None:
         self.opt = getattr(optimizer, "optimizer", optimizer)
         self.cash = cash
         self.commission = commission
@@ -744,7 +746,7 @@ class MonteCarloInSampleTester:
             title=dict(
                 text=f"<b>Monte Carlo Test Summary: {results['metric']}</b><br>"
                 f"<sub>P-value: {results['p_value']:.4f} | "
-                f"{'✅ Significant' if results['is_significant'] else '❌ Not Significant'} | "
+                f"{'Significant' if results['is_significant'] else 'Not Significant'} | "
                 f"Valid Permutations: {results['n_valid_permutations']}/{results['n_permutations']}</sub>",
                 x=0.5,
                 font=dict(size=16, color=self.style.font_color),

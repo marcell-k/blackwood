@@ -26,7 +26,9 @@ from blackwood.config import RANDOM_STATE
 
 
 class BinaryModelXGBoost:
-    def __init__(self, random_state: int = RANDOM_STATE, default_param_dist: dict[str, Any] | None = None):
+    def __init__(
+        self, random_state: int = RANDOM_STATE, default_param_dist: dict[str, int | float] | None = None
+    ) -> None:
         self.random_state = random_state
         self.default_param_dist = default_param_dist
         self.feature_names = None
@@ -79,21 +81,19 @@ class BinaryModelXGBoost:
         enable_bagging: bool = True,
         bagging_n_jobs: int = -1,  # Parallel bagging (independent of optuna n_jobs)
     ) -> dict:
-        r"""
+        """
         Hyperparameter optimization with Optuna using StratifiedKFold and optional bagging.
 
         Assumptions:
-            - Xtr/ytr and Xdev/ydev are temporally ordered (earlier rows = earlier time)
-            - No missing values in features (user preprocessed data)
             - Binary target (0/1)
 
         Notes:
-            - Bagging memory: ~n_bags × single_model_size (e.g., 10 bags = 10× memory)
-            - Bagging training time: ~n_bags × base_time (mitigated by bagging_n_jobs=-1)
+            - Bagging memory: ~n_bags x single_model_size (e.g., 10 bags = 10x memory)
+            - Bagging training time: ~n_bags x base_time (mitigated by bagging_n_jobs=-1)
 
         """
         if isinstance(ytr, pd.Series):
-            ytr = ytr.values  # Extract NumPy array, drops index metadata
+            ytr = ytr.values
         if isinstance(ydev, pd.Series):
             ydev = ydev.values
 
@@ -108,7 +108,7 @@ class BinaryModelXGBoost:
             n = len(idx)
             if n < 10 or frac <= 0.0:
                 return idx, np.array([], dtype=int)
-            cut = max(1, int(round(n * (1.0 - frac))))
+            cut = max(1, round(n * (1.0 - frac)))
             return idx[:cut], idx[cut:]
 
         def _scale_pos_weight(y: np.ndarray) -> float:
@@ -360,7 +360,7 @@ class BinaryModelXGBoost:
             tree_method="hist",
             random_state=self.random_state,
             verbosity=0,
-            early_stopping_rounds=use_early_stopping,  # ✅ None if bagged
+            early_stopping_rounds=use_early_stopping,
             callbacks=[lr_scheduler],
             learning_rate=initial_lr,
             **params_no_lr,
@@ -624,7 +624,7 @@ class BinaryModelXGBoost:
             tree_method="hist",
             random_state=self.random_state,
             verbosity=1 if not is_bagged else 0,
-            early_stopping_rounds=use_early_stopping,  # ✅ None if bagged
+            early_stopping_rounds=use_early_stopping,
             callbacks=[lr_scheduler],
             learning_rate=initial_lr,
             **params_no_lr,
@@ -727,7 +727,7 @@ class BinaryModelXGBoost:
         self,
         top_n: int | None = None,
         normalize: bool = True,
-        include_zero: bool = False,  # ✅ Changed default to False
+        include_zero: bool = False,
     ) -> pd.DataFrame:
         """
         Extract all feature importance types with proper feature name mapping.
@@ -803,7 +803,7 @@ class BinaryModelXGBoost:
             importance_df["weight_std"] = 0.0
             importance_df["cover_std"] = 0.0
 
-        # ✅ ROBUST FEATURE NAME MAPPING
+        # ROBUST FEATURE NAME MAPPING
         if self.feature_names is not None:
             # Convert to list (handles pandas.Index)
             feature_names_list = list(self.feature_names)

@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import optuna
 import pandas as pd
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from optuna.pruners import MedianPruner
 from optuna.samplers import TPESampler
 from sklearn.ensemble import BaggingClassifier
@@ -22,10 +24,10 @@ from sklearn.tree import DecisionTreeClassifier
 
 from blackwood.config import RANDOM_STATE
 from blackwood.data.splitters import CPCVSplitter
-from blackwood.visualization.style import DEFAULT_STYLE
+from blackwood.visualization.style import DEFAULT_STYLE, PlotStyle
 
 
-def _apply_axis_style(ax: plt.Axes, style=DEFAULT_STYLE) -> None:
+def _apply_axis_style(ax: Axes, style: PlotStyle = DEFAULT_STYLE) -> None:
     """Apply consistent style to a matplotlib axis."""
     ax.set_facecolor(style.plot_bgcolor)
     ax.grid(True, color=style.grid, alpha=0.35, linewidth=0.6)
@@ -38,7 +40,7 @@ def _apply_axis_style(ax: plt.Axes, style=DEFAULT_STYLE) -> None:
     ax.title.set_color(style.font_color)
 
 
-def _style_legend(ax: plt.Axes, style=DEFAULT_STYLE, **kwargs) -> None:
+def _style_legend(ax: Axes, style: PlotStyle = DEFAULT_STYLE, **kwargs) -> None:
     """Create legend using project default style."""
     legend = ax.legend(facecolor=style.plot_bgcolor, edgecolor=style.line, **kwargs)
     for text in legend.get_texts():
@@ -47,7 +49,7 @@ def _style_legend(ax: plt.Axes, style=DEFAULT_STYLE, **kwargs) -> None:
 
 _SCORE_DISPATCH = {
     "f1": lambda y_true, y_pred, _: float(
-        precision_recall_fscore_support(y_true, y_pred, average="binary", zero_division=0)[2]
+        precision_recall_fscore_support(y_true, y_pred, average="binary", zero_division=0)[2]  # type: ignore[arg-type]
     ),
     "roc_auc": lambda y_true, _, y_proba: float(roc_auc_score(y_true, y_proba)) if len(np.unique(y_true)) > 1 else 0.0,
     "neg_log_loss": lambda y_true, _, y_proba: float(-log_loss(y_true, y_proba, labels=[0, 1])),
@@ -56,7 +58,7 @@ _SCORE_DISPATCH = {
 
 
 class BinaryModelBagging:
-    def __init__(self, random_state: int = RANDOM_STATE):
+    def __init__(self, random_state: int = RANDOM_STATE) -> None:
         self.random_state = random_state
         self.model: BaggingClassifier | None = None
         self.best_params: dict | None = None
@@ -132,7 +134,7 @@ class BinaryModelBagging:
         score_fn = _SCORE_DISPATCH.get(scoring, _SCORE_DISPATCH["accuracy"])
 
         for path_idx, path_id in enumerate(path_ids):
-            train_df, test_df = splitter.get_train_test_for_path(X, paths, path_id)
+            train_df, test_df = splitter.get_train_test_for_path(paths, path_id)
             X_train = train_df[feature_cols]
             X_test = test_df[feature_cols]
             y_train = y.loc[train_df.index]
@@ -241,7 +243,7 @@ class BinaryModelBagging:
 
         best_params = study.best_params
         best_trial = study.best_trial
-        best_objective = float(best_trial.value)
+        best_objective = float(best_trial.value if best_trial.value is not None else np.nan)
         best_cv_score = float(best_trial.user_attrs.get("mean_test_score", best_objective))
         best_cv_std = float(best_trial.user_attrs.get("std_test_score", np.nan))
         best_train_score = float(best_trial.user_attrs.get("mean_train_score", np.nan))
@@ -282,6 +284,8 @@ class BinaryModelBagging:
 
     def train_optimized_model(self, X: pd.DataFrame, y: pd.Series) -> BaggingClassifier:
         """Train final model with optimized hyperparameters."""
+        if self.model is None or self.best_params is None:
+            raise RuntimeError("The model is not initialized. Please train the model before predicting.")
         if self.feature_names is not None:
             X = X[self.feature_names]
         model = self._build_model(self.best_params)
@@ -291,32 +295,24 @@ class BinaryModelBagging:
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
         """Predict probabilities for samples."""
+        if self.model is None:
+            raise RuntimeError("The model is not initialized. Please train the model before predicting.")
         if self.feature_names is not None:
             X = X[self.feature_names]
         return self.model.predict_proba(X)
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         """Predict class labels for samples."""
+        if self.model is None:
+            raise RuntimeError("The model is not initialized. Please train the model before predicting.")
         if self.feature_names is not None:
             X = X[self.feature_names]
         return self.model.predict(X)
 
     def predict_with_threshold(self, X: pd.DataFrame, threshold: float = 0.5) -> np.ndarray:
-        """Predict using custom probability threshold.
-
-        Parameters
-        ----------
-        X : pd.DataFrame
-            Features to predict on
-        threshold : float
-            Decision threshold (default 0.5)
-
-        Returns
-        -------
-        np.ndarray
-            Predicted class labels (0 or 1)
-
-        """
+        """Predict using custom probability threshold."""
+        if self.model is None:
+            raise RuntimeError("The model is not initialized. Please train the model before predicting.")
         if self.feature_names is not None:
             X = X[self.feature_names]
         y_proba = self.model.predict_proba(X)[:, 1]
@@ -346,13 +342,15 @@ class ModelEvaluation:
 
     def _resolve_model(self) -> BaggingClassifier:
         if isinstance(self.model, BinaryModelBagging):
+            if self.model.model is None:
+                raise RuntimeError("The model is not initialized.")
             model = self.model.model
             self._feature_names = self.model.feature_names
             return model
 
         if isinstance(self.model, BaggingClassifier):
             if hasattr(self.model, "feature_names_in_"):
-                self._feature_names = list(self.model.feature_names_in_)
+                self._feature_names = list(self.model.feature_names_in_)  # type: ignore
             return self.model
 
         raise TypeError("model must be BaggingClassifier or BinaryModelBagging.")
@@ -367,7 +365,7 @@ class ModelEvaluation:
         y_true = np.asarray(y).ravel().astype(int)
         y_pred = self._resolved_model.predict(X_eval)
         y_proba = self._resolved_model.predict_proba(X_eval)[:, 1]
-        precision, recall, f1, _ = precision_recall_fscore_support(y_true, y_pred, average="binary", zero_division=0)
+        precision, recall, f1, _ = precision_recall_fscore_support(y_true, y_pred, average="binary", zero_division=0)  # type: ignore
 
         auc = float(roc_auc_score(y_true, y_proba)) if np.unique(y_true).size > 1 else float("nan")
         log_loss_val = float(log_loss(y_true, np.clip(y_proba, 1e-12, 1 - 1e-12), labels=[0, 1]))
@@ -390,26 +388,7 @@ class ModelEvaluation:
         X: pd.DataFrame | None = None,
         y: pd.Series | None = None,
     ) -> dict:
-        """Find optimal prediction threshold using ROC curve analysis.
-
-        Parameters
-        ----------
-        metric : str
-            'youden': Maximize Youden's J (TPR - FPR) - recommended
-            'f1': Maximize F1 score
-            'balanced_accuracy': Maximize (TPR + TNR) / 2
-        X, y : optional
-            Dataset to optimize on. Uses test set by default.
-
-        Returns
-        -------
-        dict with keys:
-            - optimal_threshold: float
-            - metrics_at_threshold: dict (accuracy, precision, recall, f1)
-            - fpr, tpr, thresholds: ROC curve arrays
-            - per_class_recall: dict with 'loss' and 'win' recalls
-
-        """
+        """Find optimal prediction threshold using ROC curve analysis."""
         # Use test set by default
         if X is None or y is None:
             X, y = self.X_test, self.y_test
@@ -429,7 +408,10 @@ class ModelEvaluation:
             scores = np.array(
                 [
                     precision_recall_fscore_support(
-                        y_true, (y_proba >= t).astype(int), average="binary", zero_division=0
+                        y_true,
+                        (y_proba >= t).astype(int),
+                        average="binary",
+                        zero_division=0,  # type: ignore
                     )[2]
                     for t in thresholds
                 ]
@@ -448,7 +430,10 @@ class ModelEvaluation:
         # Compute metrics at optimal threshold
         y_pred_opt = (y_proba >= optimal_threshold).astype(int)
         precision, recall, f1, _ = precision_recall_fscore_support(
-            y_true, y_pred_opt, average="binary", zero_division=0
+            y_true,
+            y_pred_opt,
+            average="binary",
+            zero_division=0,  # type: ignore
         )
 
         # Per-class recall
@@ -519,7 +504,7 @@ class ModelEvaluation:
                 labels=[0, 1],
                 target_names=list(class_names),
                 digits=digits,
-                zero_division=0,
+                zero_division=0,  # type: ignore
             )
         )
 
@@ -563,7 +548,7 @@ class ModelEvaluation:
             self._print_split_classification_report("Test", self.X_test, self.y_test, class_names=class_names)
 
     def _plot_single_roc(
-        self, ax, X: pd.DataFrame, y: pd.Series, title: str, split_name: str, style=DEFAULT_STYLE
+        self, ax: Axes, X: pd.DataFrame, y: pd.Series, title: str, split_name: str, style: PlotStyle = DEFAULT_STYLE
     ) -> None:
         y_true = np.asarray(y).ravel().astype(int)
 
@@ -580,8 +565,8 @@ class ModelEvaluation:
             ax.set_title(title)
             ax.set_xlabel("False Positive Rate")
             ax.set_ylabel("True Positive Rate")
-            ax.set_xlim([0.0, 1.0])
-            ax.set_ylim([0.0, 1.05])
+            ax.set_xlim((0.0, 1.0))
+            ax.set_ylim((0.0, 1.05))
             _apply_axis_style(ax, style)
             _style_legend(ax, style, loc="lower right")
             return
@@ -602,12 +587,12 @@ class ModelEvaluation:
         ax.set_title(title)
         ax.set_xlabel("False Positive Rate")
         ax.set_ylabel("True Positive Rate")
-        ax.set_xlim([0.0, 1.0])
-        ax.set_ylim([0.0, 1.05])
+        ax.set_xlim((0.0, 1.0))
+        ax.set_ylim((0.0, 1.05))
         _apply_axis_style(ax, style)
         _style_legend(ax, style, loc="lower right")
 
-    def plot_roc_auc_curves(self, figsize: tuple[int, int] = (12, 5)):
+    def plot_roc_auc_curves(self, figsize: tuple[int, int] = (12, 5)) -> Figure:
         """Plot ROC-AUC curves for train and test datasets."""
         style = DEFAULT_STYLE
         fig, axes = plt.subplots(1, 2, figsize=figsize)
@@ -624,8 +609,7 @@ class ModelEvaluation:
         scoring: str = "neg_log_loss",
         train_sizes: np.ndarray | None = None,
         figsize: tuple[int, int] = (10, 6),
-        n_jobs: int = 1,
-    ):
+    ) -> Figure:
         """Plot learning curve with CV scores across training set sizes."""
         X_train_eval = self._prepare_features(self.X_train)
         y_train_arr = np.asarray(self.y_train).ravel().astype(int)
@@ -634,7 +618,7 @@ class ModelEvaluation:
             train_sizes = np.linspace(0.1, 1.0, 8)
 
         cv_splitter = StratifiedKFold(n_splits=cv, shuffle=True, random_state=RANDOM_STATE)
-        train_sizes_abs, train_scores, val_scores = learning_curve(
+        train_sizes_abs, train_scores, val_scores = learning_curve(  # type: ignore
             estimator=self._resolved_model,
             X=X_train_eval,
             y=y_train_arr,
@@ -693,20 +677,12 @@ class ModelEvaluation:
         fig.tight_layout()
         return fig
 
-    def plot_threshold_optimization(self, threshold_result: dict, figsize: tuple[int, int] = (12, 5)):
+    def plot_threshold_optimization(self, threshold_result: dict, figsize: tuple[int, int] = (12, 5)) -> Figure:
         """Plot ROC curve with optimal threshold marked.
 
         Parameters
-        ----------
         threshold_result : dict
             Output from optimize_threshold()
-        figsize : tuple
-            Figure size
-
-        Returns
-        -------
-        matplotlib.figure.Figure
-
         """
         style = DEFAULT_STYLE
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)

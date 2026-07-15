@@ -14,14 +14,15 @@ from sklearn.metrics import roc_auc_score
 from sklearn.tree import DecisionTreeClassifier
 
 from blackwood.config import RANDOM_STATE
+from blackwood.data.splitters import CPCVSplitter
 from blackwood.meta_labeling.selection import (
     MDAConfig,
     PCAEigenvalueAnalysis,
     RMTCorrelationProcessor,
 )
 from blackwood.meta_labeling.utils import (
-    _existing_columns,
     append_strategy_state_features_to_cpcv_paths,
+    existing_columns,
 )
 
 
@@ -291,7 +292,7 @@ def rank_features_by_cpcv_auc(
     X_train: pd.DataFrame,
     y_train: pd.DataFrame,
     paths,
-    splitter,
+    splitter: CPCVSplitter,
     remaining_features: Sequence[str],
     *,
     state_windows: tuple[int, ...] = (20, 50, 1000),

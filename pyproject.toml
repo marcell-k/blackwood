@@ -25,12 +25,14 @@ dependencies = [
   "pandas>=2.2",
   "scikit-learn>=1.5",
   "scipy>=1.13",
+  "statsmodels>=0.14.6",
 ]
 
 [project.optional-dependencies]
 viz = [
   "matplotlib>=3.9",
   "plotly>=5.22",
+  "seaborn>=0.13.2",
 ]
 portfolio = [
   "cvxpy>=1.5",
@@ -87,7 +89,7 @@ select = [
   "TCH",      # flake8-type-checking
   "RUF",      # ruff-specific
 ]
-ignore = ["ANN101", "ANN102"]
+ignore = ["ANN101", "ANN102", "ANN003"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["ANN"] 

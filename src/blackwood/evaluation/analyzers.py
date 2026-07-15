@@ -19,26 +19,29 @@ from blackwood.evaluation.utils import (
     BinnedIndicatorAnalyzer,
     BinStrategy,
     PerformanceAnalyzer,
+    ZoneMetrics,
 )
 from blackwood.visualization.core import BacktestVisualizer, ChartConfig
-from blackwood.visualization.style import DEFAULT_STYLE
+from blackwood.visualization.style import DEFAULT_STYLE, PlotStyle
 
 
 class PerformanceTablePrinter:
-    KEY_METRICS = {
-        "Sharpe Ratio",
-        "Sortino Ratio",
-        "Calmar Ratio",
-        "# Trades",
-        "Profit Factor",
-        "Win Rate [%]",
-        "Return (Ann.) [%]",
-        "Volatility (Ann.) [%]",
-        "Max. Drawdown [%]",
-        "Max. Drawdown Duration",
-        "Ulcer Index",
-        "Avg RRR",
-    }
+    KEY_METRICS: frozenset[str] = frozenset(
+        {
+            "Sharpe Ratio",
+            "Sortino Ratio",
+            "Calmar Ratio",
+            "# Trades",
+            "Profit Factor",
+            "Win Rate [%]",
+            "Return (Ann.) [%]",
+            "Volatility (Ann.) [%]",
+            "Max. Drawdown [%]",
+            "Max. Drawdown Duration",
+            "Ulcer Index",
+            "Avg RRR",
+        }
+    )
 
     @staticmethod
     def print_report(
@@ -165,7 +168,7 @@ class TimeAnalyzer:
                 indicator_name="Time",
             )
 
-    def run_analysis(self, trade_direction):
+    def run_analysis(self, trade_direction: str) -> dict[str, ZoneMetrics]:
         return self._analyzer.run_analysis(trade_direction=trade_direction)
 
 
@@ -173,7 +176,7 @@ class EquityAnalyzer:
     CHART_CONFIGS: dict[str, ChartConfig] = None
 
     @staticmethod
-    def _initialize_configs(plot_style) -> dict[str, ChartConfig]:
+    def _initialize_configs(plot_style: PlotStyle) -> dict[str, ChartConfig]:
         return {
             "rrr": ChartConfig(
                 primary_color=plot_style.accent1,
@@ -211,7 +214,7 @@ class EquityAnalyzer:
         }
 
     @staticmethod
-    def _get_default_axis_style(plot_style) -> dict[str, Any]:
+    def _get_default_axis_style(plot_style: PlotStyle) -> dict[str, Any]:
         return {
             "showgrid": True,
             "gridwidth": 1,
@@ -224,7 +227,7 @@ class EquityAnalyzer:
     def _create_figure_from_config(
         chart_type: str,
         traces: list[go.Scatter],
-        plot_style,
+        plot_style: PlotStyle,
         custom_layout: dict[str, Any] | None = None,
         xaxis_title: str = "Trade Number",
     ) -> go.Figure:
@@ -609,7 +612,7 @@ class StrategyVsBuyHoldAnalyzer:
         self.show_drawdown = show_drawdown
         self.style = DEFAULT_STYLE
 
-    def get_bh_stats(self):
+    def get_bh_stats(self) -> pd.Series:
         from blackwood.strategies.base import BuyAndHoldStrategy
 
         bt = Backtest(
@@ -843,7 +846,7 @@ class DailyNmbTradeAnalyzer:
 
 
 class TradingPerformanceAnalyzer:
-    def __init__(self, equity_data: pd.Series | pd.DataFrame, trades: pd.DataFrame | None = None):
+    def __init__(self, equity_data: pd.Series | pd.DataFrame, trades: pd.DataFrame | None = None) -> None:
         self.equity_curve = equity_data["Equity"].copy()
         self.full_equity_data = equity_data.copy()
         self.trades = trades.copy() if trades is not None else None
@@ -1241,16 +1244,16 @@ def create_gap_sigma_analyzer(df: pd.DataFrame) -> BinnedIndicatorAnalyzer:
         indicator_column="Gap_Sigma",
         bins=[-float("inf"), -2.0, -1.5, -1.0, -0.5, 0, 0.5, 1.0, 1.5, 2.0, float("inf")],
         labels=[
-            "Extreme Down (<-2σ)",
-            "Large Down (-2σ to -1.5σ)",
-            "Medium Down (-1.5σ to -1σ)",
-            "Small Down (-1σ to -0.5σ)",
-            "Tiny Down (-0.5σ to 0σ)",
-            "Tiny Up (0σ to 0.5σ)",
-            "Small Up (0.5σ to 1σ)",
-            "Medium Up (1σ to 1.5σ)",
-            "Large Up (1.5σ to 2σ)",
-            "Extreme Up (>2σ)",
+            "Extreme Down (<-2σ)",  # noqa: RUF001
+            "Large Down (-2σ to -1.5σ)",  # noqa: RUF001
+            "Medium Down (-1.5σ to -1σ)",  # noqa: RUF001
+            "Small Down (-1σ to -0.5σ)",  # noqa: RUF001
+            "Tiny Down (-0.5σ to 0σ)",  # noqa: RUF001
+            "Tiny Up (0σ to 0.5σ)",  # noqa: RUF001
+            "Small Up (0.5σ to 1σ)",  # noqa: RUF001
+            "Medium Up (1σ to 1.5σ)",  # noqa: RUF001
+            "Large Up (1.5σ to 2σ)",  # noqa: RUF001
+            "Extreme Up (>2σ)",  # noqa: RUF001
         ],
         indicator_name="Gap Sigma",
         bin_strategy=BinStrategy.FIXED,

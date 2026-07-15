@@ -3,11 +3,10 @@ from __future__ import annotations
 import math
 import multiprocessing as mp
 import warnings
-from collections.abc import Callable, Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 from itertools import combinations, product
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import backtesting
 import matplotlib.pyplot as plt
@@ -19,7 +18,15 @@ from plotly.subplots import make_subplots
 from scipy.ndimage import generic_filter
 
 from blackwood.config import RANDOM_STATE
-from blackwood.visualization.style import DEFAULT_STYLE
+from blackwood.visualization.style import DEFAULT_STYLE, PlotStyle
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+
+    from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
+
+    from blackwood.metrics.core import Stats
 
 ParameterSpace = dict[str, tuple[Any, ...] | list[int | float]]
 
@@ -38,7 +45,7 @@ class OptimizationResult:
     """
 
     stats: pd.Series | dict
-    strategy: type[Any] | None = None
+    strategy: type[Strategy]
     params: dict[str, Any] = field(default_factory=dict)
     param_names: list[str] = field(default_factory=list)
     results_df: pd.DataFrame | None = None
@@ -113,13 +120,13 @@ class ParameterSpaceHandler:
 class OptimizerVisualizer:
     """Decoupled visualization for results_df-based optimizers."""
 
-    def __init__(self, style=DEFAULT_STYLE):
+    def __init__(self, style: PlotStyle = DEFAULT_STYLE) -> None:
         self.style = style
 
     def _apply_plotly(self, fig: go.Figure) -> go.Figure:
         return self.style.apply(fig) if hasattr(self.style, "apply") else fig
 
-    def _apply_mpl(self, fig, ax) -> None:
+    def _apply_mpl(self, fig: Figure, ax: Axes) -> None:
         if hasattr(self.style, "apply_mpl"):
             self.style.apply_mpl(fig, ax)
 
@@ -157,7 +164,7 @@ class OptimizerVisualizer:
             )
         )
         fig.update_layout(
-            title=f"{metric_col} – {y_param} × {x_param} (smoothed)",
+            title=f"{metric_col} - {y_param} x {x_param} (smoothed)",
             xaxis_title=x_param,
             yaxis_title=y_param,
         )
@@ -367,7 +374,7 @@ class OptimizerVisualizer:
 
 
 class BaseOptimizer:
-    def __init__(self, bt_func: Callable | None = None):
+    def __init__(self, bt_func: Callable | None = None) -> None:
         self.bt_func = bt_func
         self.style = DEFAULT_STYLE
         self.visualizer = OptimizerVisualizer(self.style)
@@ -380,7 +387,7 @@ class BaseOptimizer:
         self.results_df = result.results_df
 
     @staticmethod
-    def _to_series(stats: Any) -> pd.Series:
+    def _to_series(stats: Stats) -> pd.Series:
         if isinstance(stats, pd.Series):
             return stats
         if isinstance(stats, dict):
@@ -594,7 +601,7 @@ class SamboOptimizer(BaseOptimizer):
 class GridOptimizer(BaseOptimizer):
     """Exhaustive Cartesian grid search over a ParameterSpace using bt_func(**bt_kwargs, **params)."""
 
-    def __init__(self, bt_func: Callable):
+    def __init__(self, bt_func: Callable) -> None:
         super().__init__(bt_func=bt_func)
 
     def optimize(
@@ -705,7 +712,7 @@ class GridOptimizer(BaseOptimizer):
 class OptunaOptimizer(BaseOptimizer):
     """Bayesian optimization via Optuna over ParameterSpace using bt_func(**bt_kwargs, **params)."""
 
-    def __init__(self, bt_func: Callable):
+    def __init__(self, bt_func: Callable) -> None:
         super().__init__(bt_func=bt_func)
         self.study: Any | None = None
         self.param_space: ParameterSpace = {}
@@ -806,11 +813,7 @@ class PortfolioOptimizer(BaseOptimizer):
     - 'portfolio': compute metric on "Portfolio_EqualWeight" equity curve (forces create_portfolios=True)
     """
 
-    def __init__(
-        self,
-        run_suite_kwargs: dict,
-        aggregate: Literal["mean", "portfolio"] = "portfolio",
-    ):
+    def __init__(self, run_suite_kwargs: dict, aggregate: Literal["mean", "portfolio"] = "portfolio") -> None:
         super().__init__(bt_func=None)
         self._run_suite_kwargs = dict(run_suite_kwargs)
         self.aggregate = aggregate
@@ -1054,4 +1057,3 @@ class PortfolioOptimizer(BaseOptimizer):
                 verbose=verbose,
                 direction=direction,
             )
-        raise ValueError(f"Unknown method '{method}'. Use 'sambo', 'optuna', or 'grid'.")

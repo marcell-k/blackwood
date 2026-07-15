@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from blackwood.data.splitters import CPCVSplitter
 from blackwood.visualization.style import DEFAULT_STYLE
 
 
@@ -12,16 +13,12 @@ def _stable_features(counter: Counter, min_count: float) -> set[str]:
     return {feature for feature, count in counter.items() if isinstance(feature, str) and count > min_count}
 
 
-def _existing_columns(df, ordered_columns):
+def existing_columns(df, ordered_columns):
     return [col for col in ordered_columns if col in set(df.columns)]
 
 
-def _normalize_feature_exclusions(
-    features_to_exclude: Sequence[str] | None = None,
-) -> set[str]:
-    """
-    Normalize exclusion names to support both prefixed and renamed feature columns.
-    """
+def _normalize_feature_exclusions(features_to_exclude: Sequence[str] | None = None) -> set[str]:
+    """Normalize exclusion names to support both prefixed and renamed feature columns."""
     exclude_set: set[str] = set()
     for col in features_to_exclude or ():
         if not isinstance(col, str):
@@ -36,9 +33,7 @@ STRATEGY_STATE_WINDOWS: tuple[int, ...] = (20, 50, 1000)
 CPCVPaths = dict[int, list[tuple[pd.DataFrame, pd.DataFrame]]]
 
 
-def get_strategy_state_feature_cols(
-    windows: tuple[int, ...] = STRATEGY_STATE_WINDOWS,
-) -> list[str]:
+def get_strategy_state_feature_cols(windows: tuple[int, ...] = STRATEGY_STATE_WINDOWS) -> list[str]:
     cols: list[str] = []
     for window in windows:
         cols.append(f"state_rrr_mean_{window}")
@@ -87,9 +82,7 @@ def compute_strategy_state_features_with_history(
     fill_rrr: float = 0.0,
     fill_winrate: float = 0.5,
 ) -> pd.DataFrame:
-    """
-    Compute state features for y_current using optional prior history.
-    """
+    """Compute state features for y_current using optional prior history."""
     combined = pd.concat([y_history, y_current], axis=0) if y_history is not None and not y_history.empty else y_current
 
     combined_feats = compute_strategy_state_features(
@@ -142,10 +135,10 @@ def append_strategy_state_features(
 
 
 def append_strategy_state_features_to_cpcv_paths(
-    splitter,
+    splitter: CPCVSplitter,
     X: pd.DataFrame,
     y_state: pd.DataFrame,
-    paths: CPCVPaths | None = None,
+    paths: CPCVPaths,
     *,
     windows: tuple[int, ...] = STRATEGY_STATE_WINDOWS,
     entry_time_col: str = "EntryTime",
@@ -159,15 +152,13 @@ def append_strategy_state_features_to_cpcv_paths(
     For each path:
     - train state is computed from that path's train history only.
     - test state is computed from path train history + prior rows in path test order.
-
-    Returns a new CPCV paths dictionary with fold DataFrames containing state columns.
     """
     exclude_set = _normalize_feature_exclusions(features_to_exclude)
     out: CPCVPaths = {}
     for path_id in sorted(paths):
         path_folds = paths[path_id]
 
-        full_train_df, full_test_df = splitter.get_train_test_for_path(X, paths, path_id)
+        full_train_df, full_test_df = splitter.get_train_test_for_path(paths, path_id)
         train_order = (
             full_train_df.sort_values(entry_time_col).index
             if entry_time_col in full_train_df.columns
@@ -454,5 +445,5 @@ def plot_probability_distributions(
     for ax in fig.get_axes():
         ax.grid(True, alpha=0.3, color=style.grid, linestyle="--", linewidth=0.5)
 
-    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    plt.tight_layout(rect=(0.0, 0.0, 1.0, 0.96))
     return fig

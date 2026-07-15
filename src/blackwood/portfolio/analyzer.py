@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
@@ -13,23 +13,10 @@ from blackwood.visualization.style import DEFAULT_STYLE
 
 
 class PortfolioAnalyzer:
-    """
-    Unified interface for preparing returns, calculating metrics,
-    and dynamic volatility-targeted portfolio analysis.
-
-    Refactored for performance (vectorized scaling), readability,
-    maintainability, and efficiency.
-    """
-
-    def __init__(self, equity_dict: dict[str, pd.Series]):
-        """
-        Args:
-            equity_dict: {'strategy_name': equity_series, ...}
-
-        """
+    def __init__(self, equity_dict: dict[str, pd.Series]) -> None:
         # Pre-sort once for consistency
         self.equity_dict = {name: series.sort_index() for name, series in equity_dict.items()}
-        self.returns: pd.DataFrame | None = None
+        self.returns: pd.DataFrame
         self.all_results = None  # TODO: clarify usage if needed
 
     @staticmethod
@@ -57,7 +44,7 @@ class PortfolioAnalyzer:
 
     @staticmethod
     def _calculate_annual_vol(returns: pd.Series, ann_factor: float, vol_method: str = "arithmetic") -> float:
-        """Shared helper – removes duplication between normalization & metrics."""
+        """Shared helper - removes duplication between normalization & metrics."""
         if len(returns) < 2:
             return 0.0
 
@@ -65,24 +52,16 @@ class PortfolioAnalyzer:
             return returns.std(ddof=1) * np.sqrt(ann_factor)
 
         if vol_method == "geometric":
-            # Original geometric formula preserved exactly
-            gmean = (1 + returns).prod() ** (1 / len(returns)) - 1
-            var_daily = returns.var(ddof=1)
+            prod_val = cast("float", (1 + returns).prod())
+            gmean = prod_val ** (1 / len(returns)) - 1
+            var_daily = cast("float", returns.var(ddof=1))
+
             return np.sqrt((var_daily + (1 + gmean) ** 2) ** ann_factor - (1 + gmean) ** (2 * ann_factor))
 
         raise ValueError(f"vol_method must be 'arithmetic' or 'geometric', got {vol_method}")
 
     def prepare_returns(self, resample_rule: str | None = "D") -> pd.DataFrame:
-        """
-        Convert equity curves to returns.
-
-        Args:
-            resample_rule: "D" (default) for daily, None for raw (intraday) bars.
-
-        Returns:
-            DataFrame with strategies as columns.
-
-        """
+        """Convert equity curves to returns."""
         returns_dict: dict[str, pd.Series] = {}
         for name, equity in self.equity_dict.items():
             equity_series = equity.resample(resample_rule).last().ffill() if resample_rule else equity
@@ -110,12 +89,7 @@ class PortfolioAnalyzer:
         initial_capital: float = CASH,
         vol_method: str = "arithmetic",
     ) -> tuple[dict[str, pd.Series], dict[str, pd.DataFrame]]:
-        """
-        Create volatility-targeted normalized equity curves with dynamic rebalancing.
-
-        Performance note: scale factors are computed *only* at rebalance dates
-        and forward-filled (vectorized). Original O(N) Python loop eliminated.
-        """
+        """Create volatility-targeted normalized equity curves with dynamic rebalancing."""
         if vol_method not in ("arithmetic", "geometric"):
             raise ValueError("vol_method must be 'arithmetic' or 'geometric'")
 
@@ -187,7 +161,7 @@ class PortfolioAnalyzer:
         daily_returns: pd.Series | None = None,
         annual_trading_days: int = 252,
         risk_free_rate: float = 0.0,
-    ) -> dict[str, float]:
+    ) -> dict[str, float | str]:
         """Comprehensive metrics (arithmetic + geometric). Reuses vol helper."""
         if daily_returns is None:
             daily_returns = equity.pct_change().dropna()
@@ -199,7 +173,7 @@ class PortfolioAnalyzer:
 
         # Geometric path
         if len(daily_returns) >= 2:
-            gmean_day = (1 + daily_returns).prod() ** (1 / len(daily_returns)) - 1
+            gmean_day = cast("float", (1 + daily_returns).prod()) ** (1 / len(daily_returns)) - 1
             ann_ret_geom = (1 + gmean_day) ** annual_trading_days - 1
             ann_vol_geom = PortfolioAnalyzer._calculate_annual_vol(daily_returns, annual_trading_days, "geometric")
             sharpe_geom = (ann_ret_geom - risk_free_rate) / ann_vol_geom if ann_vol_geom > 1e-8 else 0.0
@@ -254,21 +228,11 @@ class PortfolioReporter:
     All parameters passed explicitly - no global dependencies.
     """
 
-    def __init__(self, all_results: dict, returns: pd.DataFrame):
-        """
-        Initialize reporter.
-
-        Args:
-            all_results: Results dictionary from portfolio analysis
-            returns: Daily returns DataFrame
-
-        """
+    def __init__(self, all_results: dict, returns: pd.DataFrame) -> None:
         self.all_results = all_results
         self.returns = returns
 
-    def print_comprehensive_metrics(
-        self, risk_free_rate: float = 0.0, annual_trading_days: int = 252, precision: int = 2
-    ) -> pd.DataFrame:
+    def print_comprehensive_metrics(self, risk_free_rate: float = 0.0, precision: int = 2) -> pd.DataFrame:
 
         def calculate_pnl_and_returns_from_equity(
             equity: pd.Series, initial_capital: float | None = None
@@ -301,7 +265,7 @@ class PortfolioReporter:
             # Infer annualization factor from equity's actual index frequency so that
             # daily-resampled equity (after resample_all_results) uses 252, not the
             # original intraday factor that may have been passed via annual_trading_days.
-            effective_days = max(1, int(round(PortfolioAnalyzer.infer_annualization_factor(equity.index))))
+            effective_days = max(1, round(PortfolioAnalyzer.infer_annualization_factor(equity.index)))
 
             metrics_series = compute_all_metrics(
                 equity=equity,
@@ -351,7 +315,7 @@ class PortfolioReporter:
         rebalance_freq: str | dict[str, str] = "QE",
         lookback_periods: int | dict[str, int] = 60,
         max_periods_to_show: int = 2,
-    ):
+    ) -> None:
         """
         Print scaling factors with ALL portfolio optimizer allocations side-by-side,
         honoring per-strategy custom rebalance frequencies and lookbacks.
@@ -382,7 +346,7 @@ class PortfolioReporter:
                 all_portfolio_dates.update(weights_df.index)
 
         if not all_portfolio_dates:
-            print("❌ No portfolio weights found. Ensure backtests ran successfully.\n")
+            print("No portfolio weights found. Ensure backtests ran successfully.\n")
             return
 
         # 2) Normalize and sort the rebalance dates (naive for comparison)
@@ -534,10 +498,8 @@ class PortfolioReporter:
 
         # print("\n" + "="*200 + "\n")
 
-    def print_scaling_summary(self):
-        """
-        Print summary statistics of scaling factors across all rebalances (for portfolios).
-        """
+    def print_scaling_summary(self) -> None:
+        """Print summary statistics of scaling factors across all rebalances (for portfolios)."""
         print("\n" + "=" * 120)
         print("PORTFOLIO SCALING FACTORS SUMMARY (Average across all rebalances)")
         print("=" * 120)
@@ -746,7 +708,7 @@ class PortfolioReporter:
         print("=" * 120 + "\n")
         return summary
 
-    def print_rebalances(self, portfolio_name, rebalance_freq):
+    def print_rebalances(self, portfolio_name: str, rebalance_freq: str) -> None:
         # Extract data
         res = self.all_results[portfolio_name]["results"]
         weights_df = res["weights_history"]
@@ -802,10 +764,12 @@ class PortfolioReporter:
 
             print("-" * 55)
 
-    def print_evt_var(self, portfolio_name: str, confidence_level=0.99, threshold_quantile=0.95):
+    def print_evt_var(
+        self, portfolio_name: str, confidence_level: float = 0.99, threshold_quantile: float = 0.95
+    ) -> None:
         returns_series = self.all_results[portfolio_name]["results"]["daily_returns"]
         # 1. Convert to Losses (EVT models the right tail of losses)
-        # We assume 'returns_series' contains negative values for losses.
+        # Assume 'returns_series' contains negative values for losses.
         losses = -returns_series.dropna()
 
         # 2. Determine Threshold (u)
@@ -813,14 +777,10 @@ class PortfolioReporter:
         u = losses.quantile(threshold_quantile)
 
         # 3. Extract Excesses (y = x - u)
-        # We only care about the magnitude by which losses exceed the threshold.
         excesses = losses[losses > u] - u
 
         # 4. Fit Generalized Pareto Distribution (GPD)
-        # We fix location (floc=0) because excesses are defined relative to u.
-        # shape (xi) = Tail Index (Key metric for fat tails).
-        # scale (sigma) = Scale parameter.
-        xi, loc, sigma = genpareto.fit(excesses, floc=0)
+        xi, _loc, sigma = genpareto.fit(excesses, floc=0)
 
         # 5. Calculate VaR Formula
         # VaR = u + (sigma / xi) * [ ((N / Nu) * (1 - p))^(-xi) - 1 ]
@@ -847,9 +807,8 @@ class PortfolioReporter:
         daily_returns = equity.pct_change().fillna(0)
         daily_returns = daily_returns.fillna(0)
 
-        # ===== ANALYSIS 1: ALL DAYS (INCLUDING ZEROS) =====
-        # Convert daily returns to equity curve
-        equity_all = (1 + daily_returns).cumprod() * CASH  # Start with $10M
+        # --- Analysis 1: All Days (including zeros) ---
+        equity_all = (1 + daily_returns).cumprod() * CASH
         equity_all.index = pd.to_datetime(equity_all.index)
 
         from blackwood.metrics.core import compute_all_metrics
@@ -893,7 +852,7 @@ class PortfolioReporter:
         series_weekly = equity.resample("W").last().pct_change().dropna()
 
         # --- 3. Shared Metric Calculation Logic ---
-        def calculate_row(returns_series, label, contribution_denominator=None):
+        def calculate_row(returns_series, label: str, contribution_denominator=None):
             if len(returns_series) == 0:
                 return {}
 
@@ -958,11 +917,7 @@ class PortfolioReporter:
         Calculates monthly returns, volatility, and rolling Sharpe ratio from an equity curve.
         """
         equity_series = self.all_results[portfolio_name]["results"]["equity"]
-
-        # Resample to get month-end equity
         monthly_equity = equity_series.resample(resample_rule).last()
-
-        # Calculate monthly returns
         monthly_returns = monthly_equity.pct_change().dropna()
 
         # Resample daily returns to calculate monthly volatility
@@ -985,10 +940,8 @@ class PortfolioReporter:
 
     def plot_monthly_performance(
         self, portfolio_name: str = "Portfolio_E_L", rolling_window: int = 12, resample_rule: str = "ME"
-    ):
-        """
-        Generate a multi-panel plot for monthly performance metrics using matplotlib,
-        """
+    ) -> None:
+        """Generate a multi-panel plot for monthly performance metrics using matplotlib."""
         style = DEFAULT_STYLE
         monthly_df = self.analyze_monthly_performance(portfolio_name, rolling_window, resample_rule)
         fig, axes = plt.subplots(3, 1, figsize=(14, 12), sharex=True)
@@ -1042,15 +995,13 @@ class PortfolioReporter:
         axes[-1].xaxis.set_major_locator(mdates.YearLocator())
         axes[-1].xaxis.set_minor_locator(mdates.MonthLocator(bymonth=[1, 7]))  # Jan + Jul markers [web:11]
 
-        fig.tight_layout(rect=[0, 0, 1, 0.95])
+        fig.tight_layout(rect=(0, 0, 1, 0.95))
         style.apply_mpl(fig=fig)
         plt.show()
 
 
-def print_mixed_results(results_df):
-    """
-    Prints results with specific handling for the Weekly row separator.
-    """
+def print_mixed_results(results_df: pd.DataFrame) -> None:
+    """Prints results with specific handling for the Weekly row separator."""
     if results_df.empty:
         return
 
@@ -1152,7 +1103,7 @@ class MonteCarloAnalyzer:
         - Max DD > 75th percentile: Unlucky or biased backtest
     """
 
-    def __init__(self, random_seed: int | None = None):
+    def __init__(self, random_seed: int | None = None) -> None:
 
         self.random_seed = RANDOM_STATE
 
@@ -1185,9 +1136,7 @@ class MonteCarloAnalyzer:
         return synthetic
 
     def _calculate_equity_curves(self, returns_matrix: np.ndarray, initial_capital: float) -> np.ndarray:
-        """
-        Converts return matrix to equity curves via compounding.
-        """
+        """Converts return matrix to equity curves via compounding."""
         # Add 1 to returns to get growth factors: (1 + r)
         growth_factors = 1.0 + returns_matrix
 
@@ -1221,9 +1170,7 @@ class MonteCarloAnalyzer:
         return max_dd, avg_dd
 
     def run_simulation(self, equity: pd.Series, n_sims: int = 10000, block_size: int = 20) -> MonteCarloResults:
-        """
-        Executes Monte Carlo simulation using stationary block bootstrap.
-        """
+        """Executes Monte Carlo simulation using stationary block bootstrap."""
         print("Running Monte Carlo Simulation...")
         print(f"  Simulations: {n_sims:,}")
         print(f"  Block Size: {block_size} days")
@@ -1241,7 +1188,7 @@ class MonteCarloAnalyzer:
             )
 
         print(f"  Initial Capital: ${initial_capital:,.0f}")
-        print(f"  Return Stats: μ={returns.mean():.4f}, σ={returns.std():.4f}")
+        print(f"  Return Stats: μ={returns.mean():.4f}, σ={returns.std():.4f}")  # noqa: RUF001
 
         # Step 2: Generate synthetic returns via block bootstrap
         print("\n[1/4] Generating block bootstrap returns...")

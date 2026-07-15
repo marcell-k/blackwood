@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
-from backtesting import Strategy
 
 from blackwood.config import CASH
 from blackwood.data.splitters import CPCVSplitter
 from blackwood.optimization.walk_forward import WalkForwardOptimizer
+
+if TYPE_CHECKING:
+    from backtesting import Strategy
 
 
 class CPCVAnalyzer:
@@ -37,7 +39,7 @@ class CPCVAnalyzer:
         exclusive_orders: bool = False,
         evaluate_kelly: bool = True,
         initial_cash: float = CASH,
-    ):
+    ) -> None:
         """
         Initialize CPCV analyzer with strategies and optimization configuration.
         """
@@ -51,12 +53,9 @@ class CPCVAnalyzer:
         self.evaluate_kelly = evaluate_kelly
         self.initial_cash = float(initial_cash)
 
-        # Result cache (populated after run_analysis)
         self._path_results: dict[int, dict] | None = None
         self._aggregated_metrics: dict[str, float] | None = None
         self._best_path_info: dict[str, Any] | None = None
-
-    # ---------- Public API ----------
 
     def run_analysis(self, df: pd.DataFrame) -> CPCVAnalyzer:
         """Execute end-to-end CPCV analysis: validate, split paths, run WFO, aggregate metrics."""
@@ -68,15 +67,15 @@ class CPCVAnalyzer:
 
         return self
 
-    def get_path_results(self) -> dict[int, dict]:
+    def get_path_results(self):
         """Retrieve per-path results (fold count, final equity, path metrics, parameters)."""
         return self._path_results
 
-    def get_aggregated_metrics(self) -> dict[str, float]:
+    def get_aggregated_metrics(self):
         """Retrieve cross-path aggregated metrics (mean/median return, Sharpe, Calmar, etc.)."""
         return self._aggregated_metrics
 
-    def get_best_path(self) -> dict[str, Any]:
+    def get_best_path(self):
         """Retrieve best path selection based on composite normalized scoring."""
         return self._best_path_info
 
@@ -313,28 +312,46 @@ class CPCVAnalyzer:
             wfo = WalkForwardOptimizer(train_dfs=train_dfs, test_dfs=test_dfs)
             (
                 _,  # trades_test_base
-                _,  # trades_test_kelly
-                final_equity,
                 _,  # stats_train_list_base
                 stats_test_list_base,
-                _,  # stats_train_list_kelly
-                stats_test_list_kelly,
                 parameters,
                 _,  # bt_test_list_base
-                _,  # bt_test_list_kelly
-                sizes,
-                _,
-                _,
-            ) = wfo.run_enhanced_wfo(  # param_names, _
+                _,  # param_names
+                _,  # optimize_results
+            ) = wfo.run_wfo(
                 base_strategy=self.base_strategy,
-                kelly_strategy=self.kelly_strategy,
                 params=None,
                 max_tries=self.max_tries,
                 maximize=self.maximize,
-                trade_on_close=self.trade_on_close,
-                exclusive_orders=self.exclusive_orders,
                 verbose=False,
             )
+            final_equity = (
+                stats_test_list_base[-1].get("Equity Final [$]", self.initial_cash)
+                if stats_test_list_base
+                else self.initial_cash
+            )
+
+            # Optionally run again for the Kelly-sized strategy
+            stats_test_list_kelly: list[dict] = []
+            sizes: list[Any] = []
+            if self.evaluate_kelly:
+                (
+                    _,  # trades_test_kelly
+                    _,  # stats_train_list_kelly
+                    stats_test_list_kelly,
+                    _,  # parameters_kelly
+                    _,  # bt_test_list_kelly
+                    _,  # param_names
+                    _,  # optimize_results
+                ) = wfo.run_wfo(
+                    base_strategy=self.kelly_strategy,
+                    params=None,
+                    max_tries=self.max_tries,
+                    maximize=self.maximize,
+                    verbose=False,
+                )
+                if stats_test_list_kelly:
+                    final_equity = stats_test_list_kelly[-1].get("Equity Final [$]", final_equity)
 
             # Choose which OOS stats stream to evaluate
             stats_oos_list = stats_test_list_kelly if self.evaluate_kelly else stats_test_list_base

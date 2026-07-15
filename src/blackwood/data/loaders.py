@@ -246,11 +246,11 @@ def run_batch_backtest(
                 result["Mean RRR"] = round(stats["_trades"]["RiskRewardRatio"].mean(), 2)
             results_list.append(result)
         except FileNotFoundError:
-            print(f"❌ Error: File not found for {symbol}")
+            print(f" Error: File not found for {symbol}")
         except KeyError as e:
-            print(f"❌ Error: Configuration missing for {symbol} - {e}")
+            print(f" Error: Configuration missing for {symbol} - {e}")
         except Exception as e:
-            print(f"❌ Error testing {symbol}: {e!s}")
+            print(f" Error testing {symbol}: {e!s}")
 
     if not results_list:
         print("⚠ No valid results generated.")

@@ -16,6 +16,7 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.pyplot import Figure
 from scipy.stats import genpareto, kurtosis, norm, skew
 
 from blackwood.config import CASH, RANDOM_STATE
@@ -396,7 +397,7 @@ class MonteCarloSimulator:
         self,
         method_key: str,
         observed_equity: np.ndarray | None = None,
-    ) -> plt.Figure:
+    ) -> Figure:
         equity_paths, _, _, metadata = self._results[method_key]
 
         pct_levels = [5, 25, 50, 75, 95]
