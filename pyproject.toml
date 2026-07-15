@@ -1,74 +1,108 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "blackwood"
 version = "0.1.0"
-description = "Quantitative trading research framework: backtesting, meta-labeling, regime detection, portfolio optimization, and robustness validation"
+description = "Quantitative trading research toolkit"
 readme = "README.md"
-license = { file = "LICENSE.md" }
 requires-python = ">=3.13"
-keywords = ["quantitative-finance", "backtesting", "algorithmic-trading", "portfolio-optimization", "meta-labeling"]
+license = { file = "LICENSE.md" }
+authors = [{ name = "Marcell Kele" }]
 classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Financial and Insurance Industry",
-    "Intended Audience :: Science/Research",
-    "Topic :: Office/Business :: Financial :: Investment",
-    "Topic :: Scientific/Engineering",
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Financial and Insurance Industry",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Office/Business :: Financial :: Investment",
+  "Typing :: Typed",
 ]
 dependencies = [
-    "backtesting>=0.6.5",
-    "matplotlib>=3.11.0",
-    "numpy>=2.4.6",
-    "pandas>=3.0.3",
-    "plotly>=6.8.0",
-    "sambo>=1.25.2",
+  "numpy>=2.0",
+  "pandas>=2.2",
+  "scikit-learn>=1.5",
+  "scipy>=1.13",
 ]
 
 [project.optional-dependencies]
-ml = [
-    "xgboost",
-    "scikit-learn",
-    "optuna",
-    "hmmlearn",
-    "numba",
+viz = [
+  "matplotlib>=3.9",
+  "plotly>=5.22",
 ]
 portfolio = [
-    "cvxpy",
-    "scipy",
-]
-all = [
-    "blackwood[ml]",
-    "blackwood[portfolio]",
+  "cvxpy>=1.5",
 ]
 dev = [
-    "pytest>=8.0",
-    "pandas-stubs>=3.0.3.260530",
-    "basedpyright>=1.39.8",
-    "ruff>=0.15.17",
+  "blackwood[viz,portfolio]",
+  "pytest>=8.2",
+  "pytest-cov>=5.0",
+  "mypy>=1.10",
+  "ruff>=0.4",
+  "pre-commit>=3.7",
+  "pandas-stubs>=2.2",
 ]
 
 [project.urls]
 Repository = "https://github.com/marcell-k/blackwood"
-Issues = "https://github.com/marcell-k/blackwood/issues"
+Changelog = "https://github.com/marcell-k/blackwood/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/blackwood"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=blackwood --cov-report=term-missing -q"
+
+[tool.basedpyright]
+pythonVersion = "3.13"
+pythonPlatform = "All"
+venvPath = "."
+venv = ".venv"
+include = ["src"]
+exclude = ["**/__pycache__"]
+typeCheckingMode = "standard"
+reportMissingImports = true
+reportMissingTypeStubs = false
+reportUnusedImport = true
+reportUnusedVariable = true
+reportPrivateUsage = true
 
 [tool.ruff]
-src = ["src"]
 target-version = "py313"
 line-length = 120
+src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+select = [
+  "E", "W",   # pycodestyle
+  "F",        # pyflakes
+  "I",        # isort
+  "UP",       # pyupgrade (enforces 3.13 type syntax)
+  "ANN",      # flake8-annotations
+  "B",        # flake8-bugbear
+  "SIM",      # flake8-simplify
+  "TCH",      # flake8-type-checking
+  "RUF",      # ruff-specific
+]
+ignore = ["ANN101", "ANN102"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN"] 
 
 [tool.ruff.lint.isort]
 known-first-party = ["blackwood"]
 
-[tool.basedpyright]
-pythonVersion = "3.13"
-venvPath = "."
-venv = ".venv"
-include = ["src"]
-typeCheckingMode = "standard"
+[tool.coverage.run]
+source = ["blackwood"]
+branch = true
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+  "@overload",
+]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/blackwood"]
