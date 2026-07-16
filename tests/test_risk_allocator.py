@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+
 from blackwood.config import LIVE_START, TEST_END, TRAIN_END
 from blackwood.data.splitters import split_train_test_live
 from blackwood.portfolio.core import PortfolioBacktester
@@ -72,9 +73,7 @@ def test_compute_multipliers_no_lookahead():
 
 
 def test_overlay_constraints_sum_cap_floor_turnover():
-    allocator = CentralRiskAllocator(
-        AllocatorConfig(weight_floor=0.0, weight_cap=0.70, turnover_cap=0.10)
-    )
+    allocator = CentralRiskAllocator(AllocatorConfig(weight_floor=0.0, weight_cap=0.70, turnover_cap=0.10))
 
     base = pd.Series([0.5, 0.3, 0.2], index=["S1", "S2", "S3"], dtype=float)
     multipliers = pd.Series([0.1, 3.0, 2.0], index=["S1", "S2", "S3"], dtype=float)

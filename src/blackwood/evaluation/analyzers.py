@@ -168,12 +168,12 @@ class TimeAnalyzer:
                 indicator_name="Time",
             )
 
-    def run_analysis(self, trade_direction: str) -> dict[str, ZoneMetrics]:
+    def run_analysis(self, trade_direction: str) -> dict[str, dict[str, dict[str, ZoneMetrics]]]:
         return self._analyzer.run_analysis(trade_direction=trade_direction)
 
 
 class EquityAnalyzer:
-    CHART_CONFIGS: dict[str, ChartConfig] = None
+    CHART_CONFIGS: dict[str, ChartConfig] | None = None
 
     @staticmethod
     def _initialize_configs(plot_style: PlotStyle) -> dict[str, ChartConfig]:
@@ -273,12 +273,12 @@ class EquityAnalyzer:
     ) -> go.Figure | None:
         plot_style = DEFAULT_STYLE
         df_sorted = df.sort_values(by="EntryTime").reset_index(drop=True)
-        cumsum_rr = df_sorted[rrr_col].cumsum()
+        cumsum_rr = np.asarray(df_sorted[rrr_col].cumsum(), dtype=np.float64)
         trade_numbers = np.arange(1, len(cumsum_rr) + 1)
 
-        coeffs = np.polyfit(trade_numbers, cumsum_rr.values, deg=1)
+        coeffs = np.polyfit(trade_numbers, cumsum_rr, deg=1)
         y_fit = np.polyval(coeffs, trade_numbers)
-        global_r2 = r2_score(cumsum_rr.values, y_fit)
+        global_r2 = r2_score(cumsum_rr, y_fit)
 
         config = EquityAnalyzer._initialize_configs(plot_style)["rrr"]
 
@@ -315,7 +315,7 @@ class EquityAnalyzer:
         if return_pct.empty:
             return None
 
-        equity = np.concatenate([[1.0], (1 + return_pct).cumprod().values])
+        equity = np.concatenate([[1.0], np.asarray((1 + return_pct).cumprod(), dtype=np.float64)])
         trade_numbers = np.arange(len(equity))
 
         config = EquityAnalyzer._initialize_configs(plot_style)["equity"]
@@ -344,7 +344,7 @@ class EquityAnalyzer:
         if return_pct.empty:
             return None
 
-        equity = np.concatenate([[1.0], (1 + return_pct).cumprod().values])
+        equity = np.concatenate([[1.0], np.asarray((1 + return_pct).cumprod(), dtype=np.float64)])
         trade_numbers = np.arange(len(equity))
         running_max = np.maximum.accumulate(equity)
         drawdown_pct = ((equity - running_max) / running_max) * 100
@@ -419,7 +419,7 @@ class TradingSequenceAnalyzer:
     rr_max: float = 2.5
 
     def __post_init__(self) -> None:
-        self.rr_values: np.ndarray = self.trades_df[self.rr_column].values.copy()
+        self.rr_values: np.ndarray = np.asarray(self.trades_df[self.rr_column], dtype=np.float64).copy()
         self.style = DEFAULT_STYLE
         self._colormap_cache: LinearSegmentedColormap | None = None
         self.rr_matrix = self._create_rr_matrix()
@@ -485,7 +485,7 @@ class TradingSequenceAnalyzer:
 
     def create_matrix_heatmap(
         self, figsize: tuple[float, float] = (18, 10), show_values: bool = False, cell_fontsize: int = 7
-    ) -> plt.Figure:
+    ) -> Figure:
         fig, ax = plt.subplots(figsize=figsize)
         cmap = self._get_cached_colormap()
         norm = TwoSlopeNorm(vmin=self.rr_min, vcenter=self.rr_center, vmax=self.rr_max)
@@ -534,7 +534,7 @@ class TradingSequenceAnalyzer:
         plt.tight_layout()
         return fig
 
-    def create_losing_streak_histogram(self, figsize: tuple[float, float] = (12, 6), bins: int = 20) -> plt.Figure:
+    def create_losing_streak_histogram(self, figsize: tuple[float, float] = (12, 6), bins: int = 20) -> Figure:
         fig, ax = plt.subplots(figsize=figsize)
         streaks = self.streak_stats["losing_streaks"]
         actual_bins = min(bins, len(set(streaks))) if streaks else 1
@@ -580,9 +580,7 @@ class TradingSequenceAnalyzer:
         print(f"95th Percentile: {self.streak_stats['p95_losing_streak']:.0f} trades")
         print(f"Total Losing Streaks: {self.streak_stats['total_losing_streaks']}")
 
-    def run_complete_analysis(
-        self, show_matrix: bool = True, show_histogram: bool = True
-    ) -> tuple[plt.Figure, plt.Figure]:
+    def run_complete_analysis(self, show_matrix: bool = True, show_histogram: bool = True) -> tuple[Figure, Figure]:
         self.print_detailed_statistics()
         heatmap_fig = self.create_matrix_heatmap()
         histogram_fig = self.create_losing_streak_histogram()
@@ -761,7 +759,7 @@ class DailyNmbTradeAnalyzer:
             y=0.995,
             color=self.style.font_color,
         )
-        plt.tight_layout(rect=[0, 0, 1, 0.98])
+        plt.tight_layout(rect=(0, 0, 1, 0.98))
         self.style.apply_mpl(fig)
         plt.show()
 
@@ -771,15 +769,12 @@ class DailyNmbTradeAnalyzer:
 
         summary = self.grouped.agg(
             Count=("ReturnPct", "count"),
-            **{"Mean Return %": ("ReturnPct", lambda x: np.mean(x) * 100)},
-            **{"Std Dev %": ("ReturnPct", lambda x: np.std(x) * 100)},
-            **{"Win Rate %": ("ReturnPct", lambda x: np.mean(x > 0) * 100)},
-            **{"Best %": ("ReturnPct", lambda x: np.max(x) * 100)},
-            **{"Worst %": ("ReturnPct", lambda x: np.min(x) * 100)},
-            **{"Median %": ("ReturnPct", lambda x: np.median(x) * 100)},
-            **{"R/R Count": ("RiskRewardRatio", lambda x: np.sum(np.isfinite(x)))},
-            **{"Avg R/R": ("RiskRewardRatio", lambda x: np.nanmean(x))},
-            **{"Med R/R": ("RiskRewardRatio", lambda x: np.nanmedian(x))},
+            **{"Mean Return %": ("ReturnPct", lambda x: float(np.mean(np.asarray(x, dtype=np.float64))) * 100)},
+            **{"Std Dev %": ("ReturnPct", lambda x: float(np.std(np.asarray(x, dtype=np.float64))) * 100)},
+            **{"Win Rate %": ("ReturnPct", lambda x: float(np.mean(np.asarray(x, dtype=np.float64) > 0)) * 100)},
+            **{"Best %": ("ReturnPct", lambda x: float(np.max(np.asarray(x, dtype=np.float64))) * 100)},
+            **{"Worst %": ("ReturnPct", lambda x: float(np.min(np.asarray(x, dtype=np.float64))) * 100)},
+            **{"Median %": ("ReturnPct", lambda x: float(np.median(np.asarray(x, dtype=np.float64))) * 100)},
         )
 
         summary = summary[summary["Count"] > 0]
@@ -865,7 +860,10 @@ class TradingPerformanceAnalyzer:
         monthly_returns = self.monthly_data["MonthlyReturn"].dropna()
         if len(monthly_returns) > 0:
             self.yearly_compound_returns_pct = (
-                monthly_returns.groupby(monthly_returns.index.year).apply(lambda x: (1 + x).prod() - 1) * 100
+                monthly_returns.groupby(pd.DatetimeIndex(monthly_returns.index).year).apply(
+                    lambda x: (1 + x).prod() - 1
+                )
+                * 100
             )
         else:
             self.yearly_compound_returns_pct = pd.Series(dtype=float)
@@ -1020,7 +1018,7 @@ class TradingPerformanceAnalyzer:
         axes[3].grid(True, alpha=0.3)
 
         fig.suptitle("Trading Strategy Performance Dashboard", fontsize=14, color=self.style.font_color)
-        plt.tight_layout(rect=[0, 0, 1, 0.98])
+        plt.tight_layout(rect=(0, 0, 1, 0.98))
         self.style.apply_mpl(fig)
         return fig
 
@@ -1059,8 +1057,9 @@ class TradingPerformanceAnalyzer:
         fig, ax = plt.subplots(figsize=(12, 6))
         accent_rgba = (*[int(self.style.accent2[i : i + 2], 16) / 255 for i in (1, 3, 5)], 0.4)
 
-        ax.fill_between(drawdown.index, 0, drawdown.values, color=accent_rgba)
-        ax.plot(drawdown.index, drawdown.values, color=self.style.accent2, linewidth=2)
+        drawdown_arr = drawdown.to_numpy(dtype=np.float64)
+        ax.fill_between(drawdown.index, 0, drawdown_arr, color=accent_rgba)
+        ax.plot(drawdown.index, drawdown_arr, color=self.style.accent2, linewidth=2)
 
         top5 = sorted(periods, key=lambda x: x["max_dd"])[:5]
         for p in top5:
@@ -1116,13 +1115,15 @@ class TradingDashboard:
     def calculate_performance_metrics(self, equity_df: pd.DataFrame, trades_df: pd.DataFrame) -> dict[str, Any]:
         from blackwood.metrics.core import compute_all_metrics
 
-        return compute_all_metrics(
-            equity=equity_df["Equity"],
-            risk_free_rate=self.risk_free_rate,
-            annual_trading_days=self.annual_trading_days,
-            pnl=np.array(trades_df["PnL"]),
-            returns_pct=np.array(trades_df["ReturnPct"]),
-            benchmark_sharpe=self.benchmark_sharpe,
+        return dict(
+            compute_all_metrics(
+                equity=equity_df["Equity"],
+                risk_free_rate=self.risk_free_rate,
+                annual_trading_days=self.annual_trading_days,
+                pnl=np.array(trades_df["PnL"]),
+                returns_pct=np.array(trades_df["ReturnPct"]),
+                benchmark_sharpe=self.benchmark_sharpe,
+            )
         )
 
     def create_dashboard(

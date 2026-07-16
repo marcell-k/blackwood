@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -17,9 +17,7 @@ if TYPE_CHECKING:
     from matplotlib.figure import Figure
 
     from blackwood.optimization.optimization import OptunaOptimizer
-
-ParameterSpace = dict[str, tuple[Any, ...] | list[int | float]]
-StabilityMetrics = dict[str, dict[str, Any]]
+    from blackwood.typing import ParameterSpace, StabilityMetrics
 
 
 class OptunaStabilityAnalyzer:

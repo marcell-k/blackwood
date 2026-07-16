@@ -8,6 +8,10 @@ import pandas as pd
 from blackwood.config import CASH
 from blackwood.data.splitters import CPCVSplitter
 from blackwood.optimization.walk_forward import WalkForwardOptimizer
+from blackwood.typing import CPCVPaths
+
+if TYPE_CHECKING:
+    from backtesting import Strategy
 
 if TYPE_CHECKING:
     from backtesting import Strategy
@@ -288,9 +292,7 @@ class CPCVAnalyzer:
 
     # ---------- CPCV Split + WFO Orchestration ----------
 
-    def _run_wfo_on_paths(
-        self, cpcv_paths: dict[int, list[tuple[pd.DataFrame, pd.DataFrame]]]
-    ) -> tuple[dict[int, dict], dict[str, float], dict[str, Any]]:
+    def _run_wfo_on_paths(self, cpcv_paths: CPCVPaths) -> tuple[dict[int, dict], dict[str, float], dict[str, Any]]:
         """Run Enhanced WFO across CPCV paths."""
         path_results: dict[int, dict] = {}
         aggregated_data: dict[str, list[float]] = {"final_equities": [], "processing_times": [], "path_ids": []}

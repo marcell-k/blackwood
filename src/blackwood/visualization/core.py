@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from math import ceil
-from typing import Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,6 +14,9 @@ from sambo.plot import plot_objective
 from scipy.signal import argrelextrema
 
 from blackwood.visualization.style import DEFAULT_STYLE
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 
 def visualize_chart(
@@ -535,18 +538,23 @@ def visualize_chart(
             "rgba(156, 39, 176, 0.6)",
         ]
 
-        for idx, zone_row in sr_zones.iterrows():
+        sr_zones["first_detected_idx"] = sr_zones["first_detected_idx"].astype(int)
+        sr_zones["expires_at_idx"] = sr_zones["expires_at_idx"].astype(int)
+        sr_zones["fractal_count"] = sr_zones["fractal_count"].astype(int)
+
+        for counter, (_, zone_row) in enumerate(sr_zones.iterrows()):
             zone_low = zone_row["zone_low"]
             zone_high = zone_row["zone_high"]
-            first_detected_idx = int(zone_row["first_detected_idx"])
-            expires_at_idx = int(zone_row["expires_at_idx"])
-            fractal_count = int(zone_row["fractal_count"])
 
-            # Use original index mapping to get timestamps
+            first_detected_idx = zone_row["first_detected_idx"]
+            expires_at_idx = zone_row["expires_at_idx"]
+            fractal_count = zone_row["fractal_count"]
+
             x0 = original_idx_to_timestamp[first_detected_idx]
             x1 = original_idx_to_timestamp[expires_at_idx]
 
-            color_idx = idx % len(zone_colors)
+            # Pyright loves this because 'counter' is explicitly an int
+            color_idx = counter % len(zone_colors)
             fill_color = zone_colors[color_idx]
             border_color = zone_border_colors[color_idx]
 
@@ -1224,39 +1232,43 @@ class BacktestVisualizer:
         self._finalize_portfolio(portfolio_returns, equity_df, returns_df, "Equal-Risk Portfolio")
 
     def _calculate_drawdown(self, equity: pd.Series) -> tuple[pd.Series, dict[str, int]]:
-        running_max = equity.cummax()
-        drawdown = (equity - running_max) / running_max * 100
-        drawdown_depth = running_max - equity
+        running_max: pd.Series = equity.cummax()
+        drawdown: pd.Series = (equity - running_max) / running_max * 100
+        drawdown_depth: pd.Series = running_max - equity
 
-        if drawdown_depth.max() == 0 or len(equity) == 0:
-            metadata = {"dd_start": 0, "dd_end": 0, "dd_peak": 0}
+        if len(equity) == 0 or drawdown_depth.max() == 0:
+            metadata: dict[str, int] = {"dd_start": 0, "dd_end": 0, "dd_peak": 0}
             return drawdown, metadata
 
-        dd_peak = drawdown_depth.idxmax()
-        dd_peak_idx = equity.index.get_loc(dd_peak)
-        dd_start = equity.iloc[: dd_peak_idx + 1].idxmax()
-        dd_start_idx = equity.index.get_loc(dd_start)
-        equity_at_start = equity.loc[dd_start]
+        # Work in plain numpy/positional space to avoid the get_loc()
+        # `int | slice | np_1darray_bool` union poisoning every downstream type.
+        equity_values: NDArray[np.float64] = equity.to_numpy(dtype=float)
+        drawdown_depth_values: NDArray[np.float64] = drawdown_depth.to_numpy(dtype=float)
+        n = len(equity_values)
 
-        recovery_mask = equity.iloc[dd_peak_idx:] >= equity_at_start
+        dd_peak_idx: int = int(np.argmax(drawdown_depth_values))
+        dd_start_idx: int = int(np.argmax(equity_values[: dd_peak_idx + 1]))
+        equity_at_start: float = float(equity_values[dd_start_idx])
+
+        recovery_mask = equity_values[dd_peak_idx:] >= equity_at_start
         if recovery_mask.any():
-            recovery_label = recovery_mask.idxmax()
-            recovery_idx = equity.index.get_loc(recovery_label)
-            if recovery_idx > dd_peak_idx and equity.iloc[recovery_idx - 1] < equity_at_start:
-                dd_end_idx = np.interp(
-                    equity_at_start,
-                    [equity.iloc[recovery_idx - 1], equity.iloc[recovery_idx]],
-                    [recovery_idx - 1, recovery_idx],
+            recovery_idx: int = dd_peak_idx + int(np.argmax(recovery_mask))
+            if recovery_idx > dd_peak_idx and equity_values[recovery_idx - 1] < equity_at_start:
+                prev_value = float(equity_values[recovery_idx - 1])
+                curr_value = float(equity_values[recovery_idx])
+                dd_end_idx = round(
+                    float(np.interp(equity_at_start, [prev_value, curr_value], [recovery_idx - 1, recovery_idx]))
                 )
+
             else:
                 dd_end_idx = recovery_idx
         else:
-            dd_end_idx = len(equity) - 1
+            dd_end_idx = n - 1
 
         metadata = {
-            "dd_start": int(dd_start_idx),
-            "dd_end": int(dd_end_idx),
-            "dd_peak": int(dd_peak_idx),
+            "dd_start": dd_start_idx,
+            "dd_end": dd_end_idx,
+            "dd_peak": dd_peak_idx,
         }
         return drawdown, metadata
 
@@ -1441,15 +1453,13 @@ def create_combined_objective_plots_all_dims(
             y_candidates = []
 
             for line in source_ax.get_lines():
-                x_data = line.get_xdata()
-                y_data = line.get_ydata()
-                if len(x_data) == 0 or len(y_data) == 0:
+                x = np.asarray(line.get_xdata(), dtype=float)
+                y = np.asarray(line.get_ydata(), dtype=float)
+                if x.size == 0 or y.size == 0:
                     continue
-                x = np.asarray(x_data, dtype=float)
-                y = np.asarray(y_data, dtype=float)
                 alpha = line.get_alpha() if line.get_alpha() is not None else 1.0
 
-                if len(x) >= 2 and np.allclose(x, x[0]) and len(y) >= 2 and np.nanmin(y) >= 0.0 and np.nanmax(y) <= 1.0:
+                if x.size >= 2 and np.allclose(x, x[0]) and y.size >= 2 and np.nanmin(y) >= 0.0 and np.nanmax(y) <= 1.0:
                     target_ax.axvline(
                         x=float(x[0]),
                         color=line.get_color(),
@@ -1469,8 +1479,8 @@ def create_combined_objective_plots_all_dims(
                     y_candidates.append(y)
 
             for collection in source_ax.collections:
-                offsets = collection.get_offsets()
-                if len(offsets) == 0:
+                offsets = np.asarray(collection.get_offsets(), dtype=np.float64)
+                if offsets.size == 0:
                     continue
                 offsets = np.asarray(offsets)
                 alpha = collection.get_alpha() if collection.get_alpha() is not None else 1.0

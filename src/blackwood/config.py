@@ -16,5 +16,5 @@ TEST_END: str = "2025-11-30"
 LIVE_START: str = "2025-12-01"
 
 
-DATA_DIR = Path(os.environ.get("BLACKWOOD_DATA_PATH"))
-NEWS_PATH = Path(os.environ.get("BLACKWOOD_NEWS_PATH"))
+DATA_DIR = Path(os.environ.get("BLACKWOOD_DATA_PATH", "."))
+NEWS_PATH = Path(os.environ.get("BLACKWOOD_NEWS_PATH", "."))

@@ -8,6 +8,14 @@ import pandas as pd
 from blackwood.config import CASH, IS_MONTHS, MARGIN, OOS_MONTHS
 from blackwood.data.splitters import CPCVSplitter
 from blackwood.optimization.optimization import SamboOptimizer
+from blackwood.typing import CPCVPaths
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from backtesting import Backtest, Strategy
+
+    from blackwood.metrics.core import Stats
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -591,9 +599,7 @@ class CPCVAnalyzer:
             "best_final_equity": path_results[best_pid]["final_equity"],
         }
 
-    def _run_wfo_on_paths(
-        self, cpcv_paths: dict[int, list[tuple[pd.DataFrame, pd.DataFrame]]]
-    ) -> tuple[dict[int, dict], dict[str, float], dict[str, Any]]:
+    def _run_wfo_on_paths(self, cpcv_paths: CPCVPaths) -> tuple[dict[int, dict], dict[str, float], dict[str, Any]]:
         path_results: dict[int, dict] = {}
         aggregated_data: dict[str, list[Any]] = {"final_equities": [], "processing_times": [], "path_ids": []}
 

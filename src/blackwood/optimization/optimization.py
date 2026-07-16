@@ -27,8 +27,7 @@ if TYPE_CHECKING:
     from matplotlib.figure import Figure
 
     from blackwood.metrics.core import Stats
-
-ParameterSpace = dict[str, tuple[Any, ...] | list[int | float]]
+    from blackwood.typing import ParameterSpace
 
 
 @dataclass

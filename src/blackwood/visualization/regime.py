@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from numpy.typing import NDArray
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -90,8 +91,11 @@ def plot_regime_candlesticks(
 
     # Step 6: Helper for rectangle shapes
     def _make_rect(
-        t_start: np.datetime64, t_end: np.datetime64, fill_color: str, layer: str = "below"
-    ) -> dict[str, Any]:
+        t_start: np.datetime64 | NDArray[np.datetime64],
+        t_end: np.datetime64 | NDArray[np.datetime64],
+        fill_color: str,
+        layer: str = "below",
+    ) -> dict[str, object]:
         return dict(
             type="rect",
             xref="x",
@@ -145,7 +149,7 @@ def plot_regime_candlesticks(
                     shapes.append(_make_rect(dates[s], extended_dates[e], transition_fill, layer="above"))
 
     # Step 8: Range breaks
-    rangebreaks = [dict(bounds=["sat", "mon"])]
+    rangebreaks: list[dict[str, object]] = [dict(bounds=["sat", "mon"])]
     if use_session_hours and session_hours:
         start_h, end_h = session_hours
         if not (start_h == 0 and end_h == 24):

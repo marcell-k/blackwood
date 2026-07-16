@@ -3,6 +3,7 @@ import inspect
 import numpy as np
 import pandas as pd
 import pytest
+
 from blackwood.portfolio.risk_models import (
     EWMARiskModel,
     GARCH11RiskModel,
@@ -143,20 +144,14 @@ EXPECTED_EWMA_COV = np.array(
 
 
 def test_risk_model_constructor_signatures_unchanged():
-    expected_garch_signature = (
-        "(horizon: int = 1, corr_source: str = 'sample', "
-        "eps: float = 1e-12) -> None"
-    )
+    expected_garch_signature = "(horizon: int = 1, corr_source: str = 'sample', eps: float = 1e-12) -> None"
     assert str(inspect.signature(GARCH11RiskModel)) == expected_garch_signature
     assert (
         str(inspect.signature(EWMARiskModel))
         == "(lam: float = 0.94, ddof: int = 0, eps: float = 1e-12, init: str = 'sample') -> None"
     )
     assert str(inspect.signature(SampleCovariance)) == "(ddof: int = 1) -> None"
-    assert (
-        str(inspect.signature(LegacySampleCovariance))
-        == "(ddof: int = 1, min_periods: int | None = None) -> None"
-    )
+    assert str(inspect.signature(LegacySampleCovariance)) == "(ddof: int = 1, min_periods: int | None = None) -> None"
 
 
 def test_sample_covariance_regression():

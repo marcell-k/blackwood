@@ -4,8 +4,10 @@ from collections.abc import Sequence
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.figure import Figure
 
 from blackwood.data.splitters import CPCVSplitter
+from blackwood.typing import CPCVPaths
 from blackwood.visualization.style import DEFAULT_STYLE
 
 
@@ -13,7 +15,7 @@ def _stable_features(counter: Counter, min_count: float) -> set[str]:
     return {feature for feature, count in counter.items() if isinstance(feature, str) and count > min_count}
 
 
-def existing_columns(df, ordered_columns):
+def existing_columns(df: pd.DataFrame, ordered_columns: list[str]) -> list[str]:
     return [col for col in ordered_columns if col in set(df.columns)]
 
 
@@ -30,7 +32,6 @@ def _normalize_feature_exclusions(features_to_exclude: Sequence[str] | None = No
 
 
 STRATEGY_STATE_WINDOWS: tuple[int, ...] = (20, 50, 1000)
-CPCVPaths = dict[int, list[tuple[pd.DataFrame, pd.DataFrame]]]
 
 
 def get_strategy_state_feature_cols(windows: tuple[int, ...] = STRATEGY_STATE_WINDOWS) -> list[str]:
@@ -154,6 +155,7 @@ def append_strategy_state_features_to_cpcv_paths(
     - test state is computed from path train history + prior rows in path test order.
     """
     exclude_set = _normalize_feature_exclusions(features_to_exclude)
+    exclude_seq: list[str] = sorted(exclude_set)
     out: CPCVPaths = {}
     for path_id in sorted(paths):
         path_folds = paths[path_id]
@@ -189,7 +191,7 @@ def append_strategy_state_features_to_cpcv_paths(
             windows=windows,
             fill_rrr=fill_rrr,
             fill_winrate=fill_winrate,
-            features_to_exclude=exclude_set,
+            features_to_exclude=exclude_seq,
         )
         test_with_state = append_strategy_state_features(
             test_base.copy(),
@@ -198,7 +200,7 @@ def append_strategy_state_features_to_cpcv_paths(
             windows=windows,
             fill_rrr=fill_rrr,
             fill_winrate=fill_winrate,
-            features_to_exclude=exclude_set,
+            features_to_exclude=exclude_seq,
         )
 
         updated_folds: list[tuple[pd.DataFrame, pd.DataFrame]] = []
@@ -210,7 +212,7 @@ def append_strategy_state_features_to_cpcv_paths(
     return out
 
 
-def meta_labeling(trades):
+def meta_labeling(trades: pd.DataFrame) -> pd.DataFrame:
     cond0 = trades.RiskRewardRatio < -0.99
     cond1 = 1 - abs(trades.SL / trades.ExitPrice) < 0.01
     cond2 = trades.RiskRewardRatio > 0.2
@@ -365,11 +367,11 @@ def prob_rrr_to_size(prob: pd.Series, rrr: pd.Series, fraction: float = 0.5) -> 
 
 
 def plot_probability_distributions(
-    prob_col,
-    bet_cal,
+    prob_col: pd.Series,
+    bet_cal: pd.Series,
     bins: int = 30,
     figsize: tuple[int, int] = (12, 5),
-):
+) -> Figure:
     style = DEFAULT_STYLE
 
     prob_values = np.asarray(prob_col, dtype=float).ravel()
