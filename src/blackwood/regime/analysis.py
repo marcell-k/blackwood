@@ -116,14 +116,11 @@ def analyze_regime_statistics(df: pd.DataFrame, regime_directions: dict[int, int
         return transition_counts
 
     def regime_statistics(df: pd.DataFrame, periods: pd.DataFrame) -> pd.DataFrame:
-        r"""
+        """
         Calculate comprehensive regime statistics with tail risk metrics.
 
         Tail Risk Metrics:
-        - VaR (5%): \( \text{VaR}_{0.05} = Q_{0.05}(R) \) where Q is the quantile function
-        - CVaR: \( \text{CVaR}_{0.05} = E[R | R \leq \text{VaR}_{0.05}] \)
-        - Skewness: \( \gamma_1 = E\left[\left(\frac{R - \mu}{\sigma}\right)^3\right] \)
-        - Kurtosis: \( \gamma_2 = E\left[\left(\frac{R - \mu}{\sigma}\right)^4\right] - 3 \) (excess kurtosis)
+        - VaR (5%), CVaR, Skewness, Kurtosis
         """
         stats_list = []
 

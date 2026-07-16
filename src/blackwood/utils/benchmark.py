@@ -1,6 +1,8 @@
 import time
 import tracemalloc
+from collections.abc import Callable
 from functools import wraps
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -23,14 +25,14 @@ def benchmark(
     show_progress: bool = True,
     copy_per_iter: bool = False,
     measure_memory: bool = True,
-):
+) -> Callable:
     """Decorator for fast repeatable timing of a function with optional memory profiling."""
     if repeats < 1:
         raise ValueError("repeats must be >= 1")
 
-    def decorator(func):
+    def decorator(func: Callable) -> Callable:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args, **kwargs) -> tuple[Any, dict[str, float]]:
             label = desc or func.__name__
 
             # Warmup runs
@@ -76,7 +78,7 @@ def benchmark(
     return decorator
 
 
-def compare_outputs(a, b, _depth=0):
+def compare_outputs(a: Any, b: Any, _depth: int = 0) -> tuple[bool, str]:
     """Compare two outputs with recursive handling for nested structures."""
     # Prevent infinite recursion
     if _depth > 50:
@@ -162,7 +164,9 @@ def compare_outputs(a, b, _depth=0):
         return False, f"Cannot compare {type(a).__name__} vs {type(b).__name__}"
 
 
-def _print_comparison(labels, stats_a, stats_b, show_memory=True):
+def _print_comparison(
+    labels: tuple[str, str], stats_a: dict[str, float], stats_b: dict[str, float], show_memory: bool = True
+) -> None:
     la, lb = labels
     med_a = stats_a["median_time_s"] * 1000
     med_b = stats_b["median_time_s"] * 1000
@@ -171,7 +175,7 @@ def _print_comparison(labels, stats_a, stats_b, show_memory=True):
     print(f"\n{'─' * 62}")
     print(f"{'':14}{la:>14} {lb:>14} {'ratio':>10}")
     print(f"{'─' * 62}")
-    print(f"{'Median (ms)':14}{med_a:>14.3f} {med_b:>14.3f} {ratio:>9.2f}×")
+    print(f"{'Median (ms)':14}{med_a:>14.3f} {med_b:>14.3f} {ratio:>9.2f}×")  # noqa: RUF001
     print(f"{'Min (ms)':14}{stats_a['min_time_s'] * 1000:>14.3f} {stats_b['min_time_s'] * 1000:>14.3f}")
     print(f"{'Std (ms)':14}{stats_a['std_time_s'] * 1000:>14.3f} {stats_b['std_time_s'] * 1000:>14.3f}")
 
@@ -183,15 +187,15 @@ def _print_comparison(labels, stats_a, stats_b, show_memory=True):
         delta_b = stats_b["delta_memory_mb"]
         mem_ratio = peak_a / peak_b if peak_b > 0 else float("inf")
 
-        print(f"{'Peak Mem (MB)':14}{peak_a:>14.2f} {peak_b:>14.2f} {mem_ratio:>9.2f}×")
+        print(f"{'Peak Mem (MB)':14}{peak_a:>14.2f} {peak_b:>14.2f} {mem_ratio:>9.2f}×")  # noqa: RUF001
         print(f"{'Delta Mem (MB)':14}{delta_a:>14.2f} {delta_b:>14.2f}")
 
     print(f"{'─' * 62}\n")
 
 
 def compare_functions(
-    fn_a,
-    fn_b,
+    fn_a: Callable,
+    fn_b: Callable,
     *args,
     repeats: int = 50,
     warmup: int = 3,
@@ -199,7 +203,7 @@ def compare_functions(
     copy_per_iter: bool = True,
     measure_memory: bool = True,
     **kwargs,
-):
+) -> dict[Any, Any]:
     """Benchmark and compare two functions for performance, memory, and correctness."""
     results = {}
 
@@ -227,7 +231,7 @@ def compare_functions(
     print(f"Output match: {symbol} {msg}")
 
     if not match:
-        print("\n⚠️  MISMATCH DETAILS:")
+        print("\n  MISMATCH DETAILS:")
         print(f"    Type A: {type(result_a)}")
         print(f"    Type B: {type(result_b)}")
         if isinstance(result_a, tuple) and isinstance(result_b, tuple):
@@ -240,8 +244,8 @@ def compare_functions(
         old_mem = results[labels[0]]["stats"]["peak_memory_mb"]
         new_mem = results[labels[1]]["stats"]["peak_memory_mb"]
         print("\n✓ Optimization validated:")
-        print(f"  • Speed:  {old_time / new_time:.1f}× faster")
-        print(f"  • Memory: {old_mem / new_mem:.2f}× peak ratio")
+        print(f"  • Speed:  {old_time / new_time:.1f}× faster")  # noqa: RUF001
+        print(f"  • Memory: {old_mem / new_mem:.2f}× peak ratio")  # noqa: RUF001
         print("  • Output: Identical")
 
     # Add match info to results

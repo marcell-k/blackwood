@@ -20,7 +20,7 @@ class InformationTheory:
         - Jensen-Shannon divergence
     """
 
-    def __init__(self, random_state: int = RANDOM_STATE, n_neighbors: int = 5):
+    def __init__(self, random_state: int = RANDOM_STATE, n_neighbors: int = 5) -> None:
         self.random_state = random_state
         self.n_neighbors = n_neighbors
 

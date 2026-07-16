@@ -89,7 +89,7 @@ select = [
   "TCH",      # flake8-type-checking
   "RUF",      # ruff-specific
 ]
-ignore = ["ANN101", "ANN102", "ANN003"]
+ignore = ["ANN101", "ANN102", "ANN003", "ANN002"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["ANN"] 

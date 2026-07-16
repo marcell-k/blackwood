@@ -1,6 +1,11 @@
+from typing import TYPE_CHECKING, Any
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 from blackwood.visualization.style import DEFAULT_STYLE
 
@@ -24,7 +29,7 @@ def plot_regime_candlesticks(
     per_bar_shading: bool = False,
 ) -> go.Figure:
     """
-    Production-grade regime visualization optimized for dark theme (DEFAULT_STYLE).
+    Regime visualization optimized for dark theme (DEFAULT_STYLE).
     New parameter:
     - per_bar_shading: bool = False
         If True, shades the background with an individual rectangle for EVERY bar,
@@ -35,11 +40,6 @@ def plot_regime_candlesticks(
         If False (default), uses efficient block shading for consecutive same-regime bars
         (fewer shapes, better performance on large datasets) while remaining visually
         identical to per-bar mode when regimes are persistent.
-    Other features:
-    - Solid high-contrast candlesticks using DEFAULT_STYLE accents
-    - Perfect alignment (no gaps/overlaps, including at chart end)
-    - Dark legend panel with colored borders
-    - Transitions only available in block mode
     """
     # Step 1: Lazy Regime Column Detection
     regime_col = next((col for col in ["regime_label", "regime", "Regime", "regime_id"] if col in df.columns), None)
@@ -47,12 +47,12 @@ def plot_regime_candlesticks(
         raise ValueError("No regime column found in ['regime_label', 'regime', 'Regime', 'regime_id']")
 
     # Zero-copy array views
-    regime_labels = df[regime_col].values.astype(int)
-    dates = df.index.values
-    open_prices = df["Open"].values
-    high_prices = df["High"].values
-    low_prices = df["Low"].values
-    close_prices = df["Close"].values
+    regime_labels: NDArray[np.int_] = df[regime_col].to_numpy(dtype=int)
+    dates: NDArray[np.datetime64] = df.index.to_numpy()
+    open_prices: NDArray[np.float64] = df["Open"].to_numpy(dtype=float)
+    high_prices: NDArray[np.float64] = df["High"].to_numpy(dtype=float)
+    low_prices: NDArray[np.float64] = df["Low"].to_numpy(dtype=float)
+    close_prices: NDArray[np.float64] = df["Close"].to_numpy(dtype=float)
     n_bars = len(df)
 
     if n_bars == 0:
@@ -89,7 +89,9 @@ def plot_regime_candlesticks(
     extended_dates = np.append(dates, extended_end)
 
     # Step 6: Helper for rectangle shapes
-    def _make_rect(t_start, t_end, fill_color, layer="below"):
+    def _make_rect(
+        t_start: np.datetime64, t_end: np.datetime64, fill_color: str, layer: str = "below"
+    ) -> dict[str, Any]:
         return dict(
             type="rect",
             xref="x",
@@ -133,7 +135,7 @@ def plot_regime_candlesticks(
                 end = min(n_bars, change_idx + transition_window + 1)
                 transition_mask[start:end] = True
 
-            transition_fill = hex_to_rgba(DEFAULT_STYLE.neutral, 0.35)
+            transition_fill = hex_to_rgba(DEFAULT_STYLE.accent5, 0.35)
             if transition_mask.any():
                 padded = np.concatenate(([False], transition_mask, [False]))
                 diff = np.diff(padded.astype(int))
@@ -170,20 +172,21 @@ def plot_regime_candlesticks(
     )
 
     # Step 10: Legend/stats
-    regime_stats = []
+    regime_stats: list[dict[str, str | float]] = []
     for rid in sorted_regimes:
         line_color, name = color_map[rid]
         mask = regime_labels == rid
         regime_stats.append({"label": f"Regime {rid}", "name": name, "pct": 100.0 * mask.mean(), "color": line_color})
 
     if add_transitions:
+        transition_mask: NDArray[np.bool_] | None = None
         transition_pct = 100.0 * transition_mask.mean() if transition_mask is not None else 0.0
         regime_stats.append(
             {
                 "label": "Transition",
                 "name": f"±{transition_window} bars",
                 "pct": transition_pct,
-                "color": DEFAULT_STYLE.neutral,
+                "color": DEFAULT_STYLE.accent5,
             }
         )
 

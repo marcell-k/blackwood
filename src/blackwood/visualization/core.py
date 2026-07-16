@@ -1,14 +1,14 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from math import ceil
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from matplotlib.pyplot.axis import Axes
-from matplotlib.pyplot.figure import Figure
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from plotly.subplots import make_subplots
 from sambo.plot import plot_objective
 from scipy.signal import argrelextrema
@@ -18,7 +18,7 @@ from blackwood.visualization.style import DEFAULT_STYLE
 
 def visualize_chart(
     price_df: pd.DataFrame,
-    bbands_df: pd.DataFrame | list[pd.DataFrame] = None,
+    bbands_df: pd.DataFrame | list[pd.DataFrame] | None = None,
     bbands_names: list[str] | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
@@ -133,7 +133,7 @@ def visualize_chart(
                 if col in price_df.columns and col not in ohlc_dict:
                     ohlc_dict[col] = "last"
 
-        price_df = price_df.resample(resample).agg(ohlc_dict).dropna(subset=["Close"])
+        price_df = price_df.resample(resample).agg(ohlc_dict).dropna(subset=["Close"])  # pyright: ignore[]
 
         # Resample bbands_df list
         bbands_list = [
@@ -955,7 +955,7 @@ def plot_price_with_session_ranges(
         plot_data = df.loc[start_date:end_date].copy()
     else:
         # Use normalized index to get unique trading days efficiently
-        normalized_index = df.index.normalize()
+        normalized_index = cast("pd.DatetimeIndex", df.index).normalize()
         unique_dates = pd.Index(normalized_index.unique())
         recent_dates = unique_dates[-days_to_plot:]
         if len(recent_dates) == 0:
@@ -1407,23 +1407,11 @@ class BacktestVisualizer:
 
 
 def create_combined_objective_plots_all_dims(
-    optimize_results,
-    param_names: list[str],
-    estimator: str,
-    max_cols: int = 5,
+    optimize_results, param_names: list[str], estimator: str, max_cols: int = 5
 ) -> dict[str, Figure]:
     """
     Create combined objective function plots for all parameters across WFO periods.
-
     Grid dimensions are calculated dynamically based on the number of optimization results.
-
-    Parameters
-    ----------
-    max_cols : int, default=5
-        Maximum number of columns in the subplot grid. Actual columns will be
-        min(len(optimize_results), max_cols). Rows are calculated as
-        ceil(len(optimize_results) / ncols).
-
     """
     style = DEFAULT_STYLE
     combined_figures: dict[str, Figure] = {}

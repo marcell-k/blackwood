@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,8 +10,13 @@ import pandas as pd
 from matplotlib.patches import Patch
 from sklearn.tree import DecisionTreeRegressor, plot_tree
 
-from blackwood.optimization.optimization import OptunaOptimizer
-from blackwood.visualization.style import DEFAULT_STYLE
+from blackwood.visualization.style import DEFAULT_STYLE, PlotStyle
+
+if TYPE_CHECKING:
+    from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
+
+    from blackwood.optimization.optimization import OptunaOptimizer
 
 ParameterSpace = dict[str, tuple[Any, ...] | list[int | float]]
 StabilityMetrics = dict[str, dict[str, Any]]
@@ -27,8 +32,8 @@ class OptunaStabilityAnalyzer:
         trials_df: pd.DataFrame,
         param_space: ParameterSpace,
         metric_name: str = "Sharpe Ratio",
-        style: Any = DEFAULT_STYLE,
-    ):
+        style: PlotStyle = DEFAULT_STYLE,
+    ) -> None:
         self.trials_df = trials_df.copy()
         self.param_space = dict(param_space)
         self.metric_name = metric_name
@@ -431,7 +436,7 @@ class OptunaStabilityAnalyzer:
 
     def _plot_radar_fingerprint(
         self,
-        ax: plt.Axes,
+        ax: Axes,
         radar_df: pd.DataFrame,
         importance_map: dict[str, float],
     ) -> None:
@@ -489,7 +494,7 @@ class OptunaStabilityAnalyzer:
 
     def _plot_performance_tree(
         self,
-        ax: plt.Axes,
+        ax: Axes,
         tree: DecisionTreeRegressor | None,
         feature_names: Sequence[str],
         completed_trials: pd.DataFrame,
@@ -528,7 +533,7 @@ class OptunaStabilityAnalyzer:
 
     def _plot_param_impact_box_scatter(
         self,
-        ax: plt.Axes,
+        ax: Axes,
         completed_trials: pd.DataFrame,
         top_trials: pd.DataFrame,
         param_name: str,
@@ -584,7 +589,7 @@ class OptunaStabilityAnalyzer:
 
     def _plot_param_impact_violin(
         self,
-        ax: plt.Axes,
+        ax: Axes,
         completed_trials: pd.DataFrame,
         param_name: str,
     ) -> None:
@@ -624,7 +629,7 @@ class OptunaStabilityAnalyzer:
 
     def _plot_param_impact_swarm(
         self,
-        ax: plt.Axes,
+        ax: Axes,
         completed_trials: pd.DataFrame,
         top_trials: pd.DataFrame,
         param_name: str,
@@ -679,7 +684,7 @@ class OptunaStabilityAnalyzer:
 
     def _plot_interaction_hexbin(
         self,
-        ax: plt.Axes,
+        ax: Axes,
         completed_trials: pd.DataFrame,
         x_param: str,
         y_param: str,
@@ -687,7 +692,7 @@ class OptunaStabilityAnalyzer:
         data = completed_trials[[x_param, y_param, "score"]].dropna()
         if len(data) < 10:
             ax.text(0.5, 0.5, "Insufficient data", transform=ax.transAxes, ha="center", va="center")
-            ax.set_title(f"{x_param} × {y_param}")
+            ax.set_title(f"{x_param} × {y_param}")  # noqa: RUF001
             return
 
         hb = ax.hexbin(
@@ -727,11 +732,11 @@ class OptunaStabilityAnalyzer:
         ax.legend(loc="best", fontsize=8)
         ax.set_xlabel(x_param)
         ax.set_ylabel(y_param)
-        ax.set_title(f"{x_param} × {y_param}")
+        ax.set_title(f"{x_param} × {y_param}")  # noqa: RUF001
 
     def _plot_interaction_scatter_size(
         self,
-        ax: plt.Axes,
+        ax: Axes,
         completed_trials: pd.DataFrame,
         x_param: str,
         y_param: str,
@@ -739,7 +744,7 @@ class OptunaStabilityAnalyzer:
         data = completed_trials[[x_param, y_param, "score"]].dropna()
         if len(data) < 10:
             ax.text(0.5, 0.5, "Insufficient data", transform=ax.transAxes, ha="center", va="center")
-            ax.set_title(f"{x_param} × {y_param}")
+            ax.set_title(f"{x_param} x {y_param}")
             return
 
         score = data["score"].to_numpy()
@@ -763,11 +768,11 @@ class OptunaStabilityAnalyzer:
         )
         ax.set_xlabel(x_param)
         ax.set_ylabel(y_param)
-        ax.set_title(f"{x_param} × {y_param}")
+        ax.set_title(f"{x_param} x {y_param}")
 
     def _plot_interaction_hist2d(
         self,
-        ax: plt.Axes,
+        ax: Axes,
         completed_trials: pd.DataFrame,
         x_param: str,
         y_param: str,
@@ -775,7 +780,7 @@ class OptunaStabilityAnalyzer:
         data = completed_trials[[x_param, y_param, "score"]].dropna()
         if len(data) < 10:
             ax.text(0.5, 0.5, "Insufficient data", transform=ax.transAxes, ha="center", va="center")
-            ax.set_title(f"{x_param} × {y_param}")
+            ax.set_title(f"{x_param} x {y_param}")
             return
 
         x = data[x_param].to_numpy()
@@ -820,11 +825,11 @@ class OptunaStabilityAnalyzer:
 
         ax.set_xlabel(x_param)
         ax.set_ylabel(y_param)
-        ax.set_title(f"{x_param} × {y_param}")
+        ax.set_title(f"{x_param} x {y_param}")
 
     def _plot_stability_ranking(
         self,
-        ax: plt.Axes,
+        ax: Axes,
         completed_trials: pd.DataFrame,
         top_trials: pd.DataFrame,
         param_names: Sequence[str],
@@ -890,7 +895,7 @@ class OptunaStabilityAnalyzer:
 
     def _plot_cv_comparison(
         self,
-        ax: plt.Axes,
+        ax: Axes,
         param_names: Sequence[str],
         metrics: StabilityMetrics,
     ) -> None:
@@ -931,7 +936,7 @@ class OptunaStabilityAnalyzer:
 
     def _plot_discrete_distribution(
         self,
-        ax: plt.Axes,
+        ax: Axes,
         completed_trials: pd.DataFrame,
         top_trials: pd.DataFrame,
     ) -> None:
@@ -1014,8 +1019,8 @@ class OptunaStabilityAnalyzer:
         left_proxy = Patch(facecolor=self.style.accent5, alpha=0.65, label="All trials (left bar)")
         right_proxy = Patch(facecolor=self.style.accent3, alpha=0.85, label="Top trials (right bar)")
         handles, labels = ax.get_legend_handles_labels()
-        handles = [left_proxy, right_proxy] + handles
-        labels = ["All trials (left bar)", "Top trials (right bar)"] + labels
+        handles = [left_proxy, right_proxy, *handles]
+        labels = ["All trials (left bar)", "Top trials (right bar)", *labels]
         ax.legend(handles=handles[:12], labels=labels[:12], fontsize=7, loc="upper right")
 
     def plot_stability_dashboard(
@@ -1027,7 +1032,7 @@ class OptunaStabilityAnalyzer:
         metrics_params: Sequence[str] | None = None,
         score_sensitivity_param: str | None = None,
         show: bool = True,
-    ) -> plt.Figure:
+    ) -> Figure:
         del compare_params
         del score_sensitivity_param
 
@@ -1139,7 +1144,7 @@ class OptunaStabilityAnalyzer:
         score_sensitivity_param: str | None = None,
         show_plot: bool = True,
         verbose: bool = True,
-    ) -> tuple[pd.DataFrame, StabilityMetrics, pd.DataFrame, plt.Figure]:
+    ) -> tuple[pd.DataFrame, StabilityMetrics, pd.DataFrame, Figure]:
         completed_trials = (
             self.completed_trials_df.copy() if self.completed_trials_df is not None else self.extract_completed_trials()
         )

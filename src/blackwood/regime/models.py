@@ -48,7 +48,7 @@ class HMMEnsembleRegimeDetector:
         random_state: int = 0,
         n_jobs: int = -1,
         verbose: int = 1,
-    ):
+    ) -> None:
         # Ensemble configuration
         self.n_estimators = n_estimators
         self.n_components = n_components
@@ -76,7 +76,7 @@ class HMMEnsembleRegimeDetector:
         self.ensemble_models_: list[hmm.GaussianHMM] | None = None
         self.ensemble_results_: list[dict] | None = None
         self.feature_subsets_: list[list[int]] | None = None
-        self.feature_names_: list[str] | None = None
+        self.feature_names_: list[str] = []
         self.preprocessing_params_: dict | None = None
         self.is_fitted_: bool = False
 
@@ -233,11 +233,11 @@ class HMMEnsembleRegimeDetector:
     class _PersistentHMM(hmm.GaussianHMM):
         """Custom HMM enforcing minimum self-transition probability."""
 
-        def __init__(self, min_self_prob: float = 0.85, **kwargs):
+        def __init__(self, min_self_prob: float = 0.85, **kwargs) -> None:
             super().__init__(**kwargs)
             self.min_self_prob = min_self_prob
 
-        def _init(self, X, lengths=None) -> None:
+        def _init(self, X: pd.DataFrame, lengths: int | None = None) -> None:
             """Initialize transition matrix with persistence constraint."""
             super()._init(X, lengths)
             k = self.n_components
@@ -276,11 +276,7 @@ class HMMEnsembleRegimeDetector:
             self.transmat_ = self.transmat_ / np.maximum(row_sums, 1e-10)
 
     def fit(self, features: pd.DataFrame) -> "HMMEnsembleRegimeDetector":
-        """
-        Fit ensemble HMM on TRAINING features.
-
-        CRITICAL: Only call this on train split. Use predict() for test data.
-        """
+        """Fit ensemble HMM on TRAINING features."""
         if features.empty:
             raise ValueError("features cannot be empty")
 
@@ -360,37 +356,7 @@ class HMMEnsembleRegimeDetector:
     def predict(
         self, features: pd.DataFrame, df: pd.DataFrame | None = None
     ) -> tuple[np.ndarray, np.ndarray] | pd.DataFrame:
-        """
-        Predict regimes using FITTED models (train or out-of-sample data).
-
-        CRITICAL: This method does NOT retrain. It applies stored models to
-        features with proper temporal preprocessing (if enabled).
-
-        Parameters
-        ----------
-        features : pd.DataFrame
-            Features for prediction (train or test)
-        df : pd.DataFrame, optional
-            Original dataframe to augment with regime predictions
-
-        Returns
-        -------
-        If df is None:
-            Tuple[np.ndarray, np.ndarray]
-                (ensemble_states, ensemble_probs)
-        If df is provided:
-            pd.DataFrame
-                Augmented dataframe with regime columns
-
-        Examples
-        --------
-        >>> # Out-of-sample prediction
-        >>> detector.fit(features_train)
-        >>> states_test, probs_test = detector.predict(features_test)
-        >>>
-        >>> # With dataframe augmentation
-        >>> df_test_with_regimes = detector.predict(features_test, df_test)
-        """
+        """Predict regimes using FITTED models (train or out-of-sample data)."""
         if not self.is_fitted_:
             raise ValueError("Must call fit() before predict()")
 
@@ -466,11 +432,7 @@ class HMMEnsembleRegimeDetector:
     def fit_predict(
         self, features: pd.DataFrame, df: pd.DataFrame | None = None
     ) -> pd.DataFrame | tuple[np.ndarray, np.ndarray]:
-        """
-        Fit ensemble and return TRAINING predictions.
-
-        WARNING: DO NOT use this for test data. Use fit() then predict() instead.
-        """
+        """Fit ensemble and return TRAINING predictions."""
         self.fit(features)
         return self.predict(features, df)
 
