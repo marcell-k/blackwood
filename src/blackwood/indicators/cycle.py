@@ -1327,7 +1327,7 @@ def adaptive_smi(
     >>> df['SMI_Fast'] = adaptive_smi(df, cyc_part=0.25)
 
     Trading Signals
-    ---------------
+    ------------
     - SMI > 40: Overbought zone (potential reversal/sell)
     - SMI < -40: Oversold zone (potential reversal/buy)
     - SMI crosses above 0: Bullish momentum shift

@@ -151,7 +151,7 @@ class RegimeDetector:
         X_input = np.hstack([ohe, rf_features])
         return int(self.rf.predict(X_input[None, :])[0])
 
-    def print_diagnostics(self):
+    def print_diagnostics(self) -> None:
         pred = self.rf.predict(self._transition_X)
         print("RF confusion matrix:")
         print(confusion_matrix(self._transition_y, pred))

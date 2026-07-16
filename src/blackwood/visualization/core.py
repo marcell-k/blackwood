@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from matplotlib.pyplot.axis import Axes
+from matplotlib.pyplot.figure import Figure
 from plotly.subplots import make_subplots
 from sambo.plot import plot_objective
 from scipy.signal import argrelextrema
@@ -942,21 +944,13 @@ def visualize_chart_date_range(
 
 def plot_price_with_session_ranges(
     df: pd.DataFrame,
-    start_date: str = None,
-    end_date: str = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
     days_to_plot: int = 10,
     show_fractals: bool = False,
     show_prev_day_range: bool = True,
 ) -> go.Figure:
-    """
-    Create candlestick chart with session range boxes and previous day range boxes overlaid.
-    Optionally overlay precomputed fractal levels aligned at their confirmation time.
-    """
     style = DEFAULT_STYLE
-
-    # ------------------------------------------------------------------
-    # Select plotting window
-    # ------------------------------------------------------------------
     if start_date and end_date:
         plot_data = df.loc[start_date:end_date].copy()
     else:
@@ -970,9 +964,6 @@ def plot_price_with_session_ranges(
             start_day = recent_dates[0]
             plot_data = df.loc[normalized_index >= start_day].copy()
 
-    # ------------------------------------------------------------------
-    # Base candlestick trace
-    # ------------------------------------------------------------------
     fig = go.Figure()
 
     fig.add_trace(
@@ -988,9 +979,7 @@ def plot_price_with_session_ranges(
         )
     )
 
-    # ------------------------------------------------------------------
-    # Previous day range boxes
-    # ------------------------------------------------------------------
+    # ---- Previous day range boxes ----
     if show_prev_day_range and {"PrevDayHigh", "PrevDayLow"}.issubset(plot_data.columns):
         prev_high = plot_data["PrevDayHigh"]
         prev_low = plot_data["PrevDayLow"]
@@ -1037,9 +1026,7 @@ def plot_price_with_session_ranges(
                 )
             )
 
-    # ------------------------------------------------------------------
-    # Current session range boxes
-    # ------------------------------------------------------------------
+    # ---- Current session range boxes ----
     range_high = plot_data["RangeHigh"]
     range_low = plot_data["RangeLow"]
 
@@ -1085,9 +1072,7 @@ def plot_price_with_session_ranges(
             )
         )
 
-    # ------------------------------------------------------------------
-    # Optional fractal overlays
-    # ------------------------------------------------------------------
+    # ---- Optional fractal overlays ----
     if show_fractals and {"Fractal_high", "Fractal_low"}.issubset(plot_data.columns):
         fig.add_trace(
             go.Scatter(
@@ -1119,9 +1104,7 @@ def plot_price_with_session_ranges(
             )
         )
 
-    # ------------------------------------------------------------------
-    # Base layout (semantic, not stylistic)
-    # ------------------------------------------------------------------
+    # ---- Base layout (semantic, not stylistic) ----
     fig.update_layout(
         title="Price Action with Session Range (Blue) and Previous Day Range (Orange)",
         xaxis_title="Time",
@@ -1132,11 +1115,7 @@ def plot_price_with_session_ranges(
         showlegend=True,
     )
 
-    # ------------------------------------------------------------------
-    # Apply global PlotStyle LAST
-    # ------------------------------------------------------------------
     style.apply(fig)
-
     return fig
 
 
@@ -1147,7 +1126,7 @@ class BacktestVisualizer:
         risk_lookback: int = 252,
         extrema_order: int = 50,  # Typical: 20-100; higher = smoother/fewer points
         create_portfolios: bool = False,
-    ):
+    ) -> None:
         """
         Initialize BacktestVisualizer with equity curves.
 
@@ -1187,7 +1166,7 @@ class BacktestVisualizer:
     def _get_color(self, idx: int) -> str:
         return self.colors[idx % len(self.colors)]
 
-    def _apply_style(self, fig: go.Figure) -> go.Figure:
+    def apply_style(self, fig: go.Figure) -> go.Figure:
         return self.style.apply(fig)
 
     def _prepare_strategy_data(self) -> tuple[pd.DataFrame, pd.DataFrame] | None:
@@ -1347,7 +1326,7 @@ class BacktestVisualizer:
         if not filtered_equity:
             fig = go.Figure()
             fig.add_annotation(text="No matching equity curves")
-            return self._apply_style(fig)
+            return self.apply_style(fig)
 
         if show_drawdown:
             fig = make_subplots(
@@ -1418,9 +1397,9 @@ class BacktestVisualizer:
         else:
             fig.update_yaxes(type="log", title_text="Equity ($)")
         fig.update_xaxes(title_text="Date")
-        return self._apply_style(fig)
+        return self.apply_style(fig)
 
-    def return_portfolio(self, type: str, resample: str = None):
+    def return_portfolio(self, type: str, resample: str | None = None) -> pd.Series:
         equity = self.equity_dict[type]
         if resample:
             equity = equity.resample(resample).last().dropna()
@@ -1432,7 +1411,7 @@ def create_combined_objective_plots_all_dims(
     param_names: list[str],
     estimator: str,
     max_cols: int = 5,
-) -> dict[str, plt.Figure]:
+) -> dict[str, Figure]:
     """
     Create combined objective function plots for all parameters across WFO periods.
 
@@ -1447,7 +1426,7 @@ def create_combined_objective_plots_all_dims(
 
     """
     style = DEFAULT_STYLE
-    combined_figures: dict[str, plt.Figure] = {}
+    combined_figures: dict[str, Figure] = {}
 
     # Dynamic grid calculation
     n_results = len(optimize_results)
@@ -1470,7 +1449,7 @@ def create_combined_objective_plots_all_dims(
                 print(f"Warning: Could not create plot for WFO period {i + 1}, parameter {param_name}: {e}")
                 individual_figs.append(None)
 
-        def _copy_objective_to_ax(source_ax: plt.Axes, target_ax: plt.Axes) -> None:
+        def _copy_objective_to_ax(source_ax: Axes, target_ax: Axes) -> None:
             y_candidates = []
 
             for line in source_ax.get_lines():
@@ -1562,7 +1541,7 @@ def create_combined_objective_plots_all_dims(
             fontweight="bold",
             color=style.font_color,
         )
-        plt.tight_layout(rect=[0, 0, 1, 0.96])
+        plt.tight_layout(rect=(0, 0, 1, 0.96))
         plt.show()
 
         combined_figures[param_name] = fig
@@ -1582,4 +1561,4 @@ class ChartConfig:
     trace_width: int = 2
     marker_size: int = 3
     show_hline_zero: bool = False
-    layout_overrides: dict[str, Any] = None  # Additional layout customization
+    layout_overrides: dict[str, Any] | None = None  # Additional layout customization

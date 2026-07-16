@@ -30,11 +30,6 @@ if TYPE_CHECKING:
 _FOLD_COL_RE = re.compile(r"^fold_(\d+)_(\d+)_sharpe$")
 
 
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
-
-
 def _get_plotting_tools(force_agg: bool = False):
     """Lazy-load Matplotlib and project styling."""
     import matplotlib.pyplot as plt
@@ -223,9 +218,7 @@ def _interpret_param_spec(spec: Any) -> dict[str, Any]:
     return {"kind": "unknown"}
 
 
-# ---------------------------------------------------------------------------
-# Config / result containers
-# ---------------------------------------------------------------------------
+# ---- Config / result containers ----
 
 
 @dataclass
@@ -283,15 +276,10 @@ class PhaseResult:
     passed: bool = True
 
 
-# ---------------------------------------------------------------------------
-# BacktestRunner
-# ---------------------------------------------------------------------------
-
-
 class BacktestRunner:
     """Centralized Backtesting.py runner configured by StabilityConfig."""
 
-    def __init__(self, config: StabilityConfig):
+    def __init__(self, config: StabilityConfig) -> None:
         self.config = config
 
     def _make_dynamic_strategy(self, base_cls: type[Strategy], params: dict[str, Any]) -> type[Strategy]:
@@ -310,11 +298,6 @@ class BacktestRunner:
             trade_on_close=True,
         )
         return bt.run()
-
-
-# ---------------------------------------------------------------------------
-# ParameterPerturber
-# ---------------------------------------------------------------------------
 
 
 class ParameterPerturber:
@@ -354,11 +337,6 @@ class ParameterPerturber:
             else:
                 out[name] = base_val
         return out
-
-
-# ---------------------------------------------------------------------------
-# DualFilterSelector
-# ---------------------------------------------------------------------------
 
 
 class DualFilterSelector:
@@ -522,11 +500,6 @@ class DualFilterSelector:
             "dropped_by_top_n": int(df["phase2_dropped_by_top_n"].sum()),
         }
         return top_n_df, filter_counts
-
-
-# ---------------------------------------------------------------------------
-# PnLBootstrapValidator
-# ---------------------------------------------------------------------------
 
 
 class PnLBootstrapValidator:
@@ -866,11 +839,6 @@ def _cpcv_path_worker(
     return all_param_results
 
 
-# ---------------------------------------------------------------------------
-# OOSValidator
-# ---------------------------------------------------------------------------
-
-
 class OOSValidator:
     """Phase 4: Out-of-sample validation on holdout data."""
 
@@ -1017,11 +985,6 @@ class OOSValidator:
         return pd.DataFrame(results)
 
 
-# ---------------------------------------------------------------------------
-# TierClassifier
-# ---------------------------------------------------------------------------
-
-
 class TierClassifier:
     """
     Phase 5: Multi-criteria ranking and tier assignment.
@@ -1157,11 +1120,6 @@ class TierClassifier:
         df = df.sort_values("composite_score", ascending=False).reset_index(drop=True)
         df["rank"] = np.arange(1, len(df) + 1)
         return df
-
-
-# ---------------------------------------------------------------------------
-# ParameterStabilityPipeline
-# ---------------------------------------------------------------------------
 
 
 class ParameterStabilityPipeline:
@@ -1523,10 +1481,6 @@ class ParameterStabilityPipeline:
         if verbose:
             print(f" Added full-train Sharpe for top {top_n_int} candidates ({success}/{top_n_int} successful).")
         return enriched
-
-    # ------------------------------------------------------------------
-    # Plotting
-    # ------------------------------------------------------------------
 
     def plot_filter_funnel(self, show: bool = True) -> Figure:
         plt, sty = _get_plotting_tools(force_agg=not show)
