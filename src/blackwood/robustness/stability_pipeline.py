@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 from sklearn.neighbors import BallTree
+from tqdm.auto import tqdm
 from tqdm.notebook import tqdm
 
 if not os.environ.get("MPLCONFIGDIR"):
@@ -640,23 +641,17 @@ class PnLBootstrapValidator:
 
         rng = np.random.default_rng(seed)
         T = len(log_returns)
-        sharpe_vals: list[float] = []
-        calmar_vals: list[float] = []
-        for _ in range(n_iterations):
-            sampled_log_returns = self._stationary_block_resample(
-                log_returns,
-                n_samples=T,
-                avg_block_length=block_length,
-                rng=rng,
+        sampled_matrix = np.empty((n_iterations, T), dtype=float)
+        for i in range(n_iterations):
+            sampled_matrix[i] = self._stationary_block_resample(
+                log_returns, n_samples=T, avg_block_length=block_length, rng=rng
             )
-            sharpe, calmar = self._compute_single_path_metrics(sampled_log_returns, initial_equity=initial_equity)
-            if np.isfinite(sharpe):
-                sharpe_vals.append(float(sharpe))
-            if np.isfinite(calmar):
-                calmar_vals.append(float(calmar))
 
-        valid_sharpes = np.asarray(sharpe_vals, dtype=float)
-        valid_calmars = np.asarray(calmar_vals, dtype=float)
+        equity_batch = float(initial_equity) * np.exp(np.cumsum(sampled_matrix, axis=1))
+        sharpe_arr, calmar_arr = self._compute_batch_metrics(sampled_matrix, equity_batch)
+
+        valid_sharpes = sharpe_arr[np.isfinite(sharpe_arr)]
+        valid_calmars = calmar_arr[np.isfinite(calmar_arr)]
 
         if len(valid_sharpes) > 0:
             mean_sharpe = float(np.mean(valid_sharpes))
@@ -809,8 +804,6 @@ def _cpcv_path_worker(
             return runner.run(df, strategy_class, params)
 
         optimizer = OptunaOptimizer(bt_func=bt_func_train)
-
-        optimizer = OptunaOptimizer(bt_func=bt_func_train)
         optimizer.optimize(
             param_space=param_space,
             metric="Sharpe Ratio",
@@ -901,100 +894,137 @@ class OOSValidator:
         is_metrics: dict[tuple, dict[str, float]],
     ) -> pd.DataFrame:
         param_cols = extract_param_cols(paramsets, self.param_space)
-        results = []
+        row_dicts = paramsets.to_dict("records")
 
-        for row_dict in paramsets.to_dict("records"):
-            params = {col: row_dict[col] for col in param_cols}
-            param_key = tuple(sorted(params.items()))
-
-            try:
-                stats = self.runner.run(holdout_df, strategy_class, params)
-
-                oos_maxdd_raw = float(stats.get("Max. Drawdown [%]", np.nan))
-                oos_maxdd = abs(oos_maxdd_raw) if np.isfinite(oos_maxdd_raw) else np.nan
-                oos_maxdd_frac = oos_maxdd / 100.0 if np.isfinite(oos_maxdd) else np.nan
-                oos_sharpe = float(stats.get("Sharpe Ratio", np.nan))
-                oos_calmar = float(stats.get("Calmar Ratio", np.nan))
-                oos_return = float(stats.get("Return (Ann.) [%]", np.nan))
-                oos_winrate = float(stats.get("Win Rate [%]", np.nan))
-                oos_trades = int(stats.get("# Trades", 0))
-
-                cached = is_metrics.get(param_key, {})
-                is_sharpe = cached.get("sharpe", np.nan)
-                is_calmar = cached.get("calmar", np.nan)
-                is_return = cached.get("return", np.nan)
-
-                deg_sharpe = self._safe_ratio(oos_sharpe, is_sharpe)
-                deg_calmar = self._safe_ratio(oos_calmar, is_calmar)
-                deg_return = self._safe_ratio(oos_return, is_return)
-
-                pass_oos = (
-                    np.isfinite(oos_sharpe)
-                    and oos_sharpe >= self.config.oos_sharpe_min
-                    and np.isfinite(deg_sharpe)
-                    and deg_sharpe >= self.config.oos_degradation_min
-                    and oos_trades >= 10
+        if self.config.n_jobs == 1:
+            results = [
+                self._evaluate_candidate(row_dict, param_cols, holdout_df, strategy_class, is_metrics)
+                for row_dict in row_dicts
+            ]
+        else:
+            n_workers = self.config.n_jobs if self.config.n_jobs > 0 else -1
+            results = Parallel(n_jobs=n_workers, backend="loky", verbose=0)(
+                delayed(_oos_candidate_worker)(
+                    row_dict=row_dict,
+                    param_cols=param_cols,
+                    holdout_df=holdout_df,
+                    strategy_class=strategy_class,
+                    param_space=self.param_space,
+                    config=self.config,
+                    is_metrics=is_metrics,
                 )
-
-                neigh_pass_rate, neigh_sharpe_p05, pass_neighborhood = 0.0, np.nan, False
-                if pass_oos and np.isfinite(is_sharpe):
-                    n_neigh = self.config.neigh_n_quick if self.config.quick_mode else self.config.neigh_n
-                    rng = np.random.default_rng(self._neighborhood_seed(param_key))
-                    sharpes: list[float] = []
-                    valid = passed = 0
-                    for _ in range(int(n_neigh)):
-                        p2 = self.perturber.perturb(params, rng)
-                        try:
-                            st2 = self.runner.run(holdout_df, strategy_class, p2)
-                        except Exception:
-                            continue
-                        s2 = float(st2.get("Sharpe Ratio", np.nan))
-                        t2 = int(st2.get("# Trades", 0))
-                        if not np.isfinite(s2):
-                            continue
-                        sharpes.append(s2)
-                        valid += 1
-                        deg2 = self._safe_ratio(s2, is_sharpe)
-                        if (
-                            np.isfinite(deg2)
-                            and s2 >= self.config.oos_sharpe_min
-                            and deg2 >= self.config.oos_degradation_min
-                            and t2 >= 10
-                        ):
-                            passed += 1
-                    if valid > 0:
-                        neigh_pass_rate = passed / valid
-                        neigh_sharpe_p05 = float(np.percentile(sharpes, 5))
-                        pass_neighborhood = neigh_pass_rate >= self.config.neigh_pass_min
-
-            except Exception:
-                results.append(self._failed_oos_result(row_dict, param_key, is_metrics))
-                continue
-
-            results.append(
-                {
-                    **row_dict,
-                    "is_sharpe": is_sharpe,
-                    "is_calmar": is_calmar,
-                    "is_return": is_return,
-                    "oos_sharpe": oos_sharpe,
-                    "oos_calmar": oos_calmar,
-                    "oos_return": oos_return,
-                    "oos_winrate": oos_winrate,
-                    "oos_maxdd": oos_maxdd,
-                    "oos_maxdd_frac": oos_maxdd_frac,
-                    "oos_trades": oos_trades,
-                    "degradation_sharpe": deg_sharpe,
-                    "degradation_calmar": deg_calmar,
-                    "degradation_return": deg_return,
-                    "pass_oos": pass_oos,
-                    "neigh_pass_rate": neigh_pass_rate,
-                    "neigh_sharpe_p05": neigh_sharpe_p05,
-                    "pass_neighborhood": pass_neighborhood,
-                }
+                for row_dict in row_dicts
             )
 
         return pd.DataFrame(results)
+
+    def _evaluate_candidate(
+        self,
+        row_dict: dict,
+        param_cols: list,
+        holdout_df: pd.DataFrame,
+        strategy_class: type[Strategy],
+        is_metrics: dict[tuple, dict[str, float]],
+    ) -> dict:
+        params = {col: row_dict[col] for col in param_cols}
+        param_key = tuple(sorted(params.items()))
+
+        try:
+            stats = self.runner.run(holdout_df, strategy_class, params)
+
+            oos_maxdd_raw = float(stats.get("Max. Drawdown [%]", np.nan))
+            oos_maxdd = abs(oos_maxdd_raw) if np.isfinite(oos_maxdd_raw) else np.nan
+            oos_maxdd_frac = oos_maxdd / 100.0 if np.isfinite(oos_maxdd) else np.nan
+            oos_sharpe = float(stats.get("Sharpe Ratio", np.nan))
+            oos_calmar = float(stats.get("Calmar Ratio", np.nan))
+            oos_return = float(stats.get("Return (Ann.) [%]", np.nan))
+            oos_winrate = float(stats.get("Win Rate [%]", np.nan))
+            oos_trades = int(stats.get("# Trades", 0))
+
+            cached = is_metrics.get(param_key, {})
+            is_sharpe = cached.get("sharpe", np.nan)
+            is_calmar = cached.get("calmar", np.nan)
+            is_return = cached.get("return", np.nan)
+
+            deg_sharpe = self._safe_ratio(oos_sharpe, is_sharpe)
+            deg_calmar = self._safe_ratio(oos_calmar, is_calmar)
+            deg_return = self._safe_ratio(oos_return, is_return)
+
+            pass_oos = (
+                np.isfinite(oos_sharpe)
+                and oos_sharpe >= self.config.oos_sharpe_min
+                and np.isfinite(deg_sharpe)
+                and deg_sharpe >= self.config.oos_degradation_min
+                and oos_trades >= 10
+            )
+
+            neigh_pass_rate, neigh_sharpe_p05, pass_neighborhood = 0.0, np.nan, False
+            if pass_oos and np.isfinite(is_sharpe):
+                n_neigh = self.config.neigh_n_quick if self.config.quick_mode else self.config.neigh_n
+                rng = np.random.default_rng(self._neighborhood_seed(param_key))
+                sharpes: list[float] = []
+                valid = passed = 0
+                for _ in range(int(n_neigh)):
+                    p2 = self.perturber.perturb(params, rng)
+                    try:
+                        st2 = self.runner.run(holdout_df, strategy_class, p2)
+                    except Exception:
+                        continue
+                    s2 = float(st2.get("Sharpe Ratio", np.nan))
+                    t2 = int(st2.get("# Trades", 0))
+                    if not np.isfinite(s2):
+                        continue
+                    sharpes.append(s2)
+                    valid += 1
+                    deg2 = self._safe_ratio(s2, is_sharpe)
+                    if (
+                        np.isfinite(deg2)
+                        and s2 >= self.config.oos_sharpe_min
+                        and deg2 >= self.config.oos_degradation_min
+                        and t2 >= 10
+                    ):
+                        passed += 1
+                if valid > 0:
+                    neigh_pass_rate = passed / valid
+                    neigh_sharpe_p05 = float(np.percentile(sharpes, 5))
+                    pass_neighborhood = neigh_pass_rate >= self.config.neigh_pass_min
+
+        except Exception:
+            return self._failed_oos_result(row_dict, param_key, is_metrics)
+
+        return {
+            **row_dict,
+            "is_sharpe": is_sharpe,
+            "is_calmar": is_calmar,
+            "is_return": is_return,
+            "oos_sharpe": oos_sharpe,
+            "oos_calmar": oos_calmar,
+            "oos_return": oos_return,
+            "oos_winrate": oos_winrate,
+            "oos_maxdd": oos_maxdd,
+            "oos_maxdd_frac": oos_maxdd_frac,
+            "oos_trades": oos_trades,
+            "degradation_sharpe": deg_sharpe,
+            "degradation_calmar": deg_calmar,
+            "degradation_return": deg_return,
+            "pass_oos": pass_oos,
+            "neigh_pass_rate": neigh_pass_rate,
+            "neigh_sharpe_p05": neigh_sharpe_p05,
+            "pass_neighborhood": pass_neighborhood,
+        }
+
+
+def _oos_candidate_worker(
+    row_dict: dict,
+    param_cols: list,
+    holdout_df: pd.DataFrame,
+    strategy_class: type[Strategy],
+    param_space: dict[str, Any],
+    config: StabilityConfig,
+    is_metrics: dict[tuple, dict[str, float]],
+) -> dict:
+    validator = OOSValidator(config, param_space)
+    return validator._evaluate_candidate(row_dict, param_cols, holdout_df, strategy_class, is_metrics)
 
 
 class TierClassifier:
@@ -1056,8 +1086,13 @@ class TierClassifier:
         )
 
         # Aggregated OOS robustness
-        is_sh = df.get("is_sharpe", df.get("cpcv_sharpe_median", df.get("mean_sharpe", np.nan)))
+        _nan_series = pd.Series(np.nan, index=df.index)
+        is_sh = df.get("is_sharpe", df.get("cpcv_sharpe_median", df.get("mean_sharpe", _nan_series)))
+        if not isinstance(is_sh, pd.Series):
+            is_sh = _nan_series
         oos_sh = df.get("oos_sharpe", np.nan)
+        if not isinstance(oos_sh, pd.Series):
+            oos_sh = _nan_series
         ratio = np.clip(
             (oos_sh.to_numpy(dtype=float) + eps) / (is_sh.to_numpy(dtype=float) + eps),
             1e-3,
@@ -1272,7 +1307,7 @@ class ParameterStabilityPipeline:
                 path_seed=seed,
                 constraint=self.constraints,
             )
-            for (path_id, folds), seed in zip(cpcv_paths.items(), path_seed_ints, strict=False)
+            for (path_id, folds), seed in zip(cpcv_paths.items(), path_seed_ints, strict=True)
         )
 
         # Merge path results
