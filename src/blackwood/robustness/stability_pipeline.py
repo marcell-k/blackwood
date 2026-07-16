@@ -28,10 +28,12 @@ if TYPE_CHECKING:
 
     from matplotlib.figure import Figure
 
+    from blackwood.typing import BacktestFunc, BacktestStats, StabilityMetrics
+
 _FOLD_COL_RE = re.compile(r"^fold_(\d+)_(\d+)_sharpe$")
 
 
-def _get_plotting_tools(force_agg: bool = False):
+def _get_plotting_tools(force_agg: bool = False) -> tuple[ModuleType, PlotStyle]:
     """Lazy-load Matplotlib and project styling."""
     import matplotlib.pyplot as plt
 
@@ -287,7 +289,7 @@ class BacktestRunner:
         strategy = type("_S", (base_cls,), dict(params))
         return strategy
 
-    def run(self, df: pd.DataFrame, strategy_class: type[Strategy], params: dict[str, Any]) -> dict:
+    def run(self, df: pd.DataFrame, strategy_class: type[Strategy], params: dict[str, Any]) -> BacktestStats:
         bt = Backtest(
             df,
             self._make_dynamic_strategy(strategy_class, params),
@@ -299,6 +301,17 @@ class BacktestRunner:
             trade_on_close=True,
         )
         return bt.run()
+
+    def as_bt_func(self, strategy_class: type[Strategy]) -> BacktestFunc:
+        """Return a `bt_func`-shaped closure bound to `strategy_class`, for use with GridOptimizer/OptunaOptimizer."""
+
+        def _run(
+            df: pd.DataFrame, strat: type[Strategy] | None = None, cash: float | None = None, **params: Any
+        ) -> BacktestStats:
+            del strat, cash  # cash/margin/commission come from self.config
+            return self.run(df, strategy_class, params)
+
+        return _run
 
 
 class ParameterPerturber:
@@ -1152,6 +1165,7 @@ class ParameterStabilityPipeline:
         self._holdout_df: pd.DataFrame | None = None
         self._reference_train_df: pd.DataFrame | None = None
         self._final_ranking: pd.DataFrame | None = None
+        self._stability_metrics: StabilityMetrics | None = None
 
     def run_full_pipeline(
         self,

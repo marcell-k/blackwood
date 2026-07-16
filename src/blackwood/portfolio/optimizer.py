@@ -492,10 +492,10 @@ class NCOStrategy(OptimizationStrategy):
         max_weight_inter: float | None = None,
         use_denoising: bool = False,
         solver: str = "OSQP",
-        risk_model=None,
+        risk_model: RiskModel | None = None,
         eps: float = 1e-12,
         annualization: int = 252,
-    ):
+    ) -> None:
         self.n_clusters = n_clusters
         self.linkage_method = linkage_method
         self.risk_free_rate = float(risk_free_rate)
@@ -1203,7 +1203,7 @@ class EnsembleStrategy(OptimizationStrategy):
         hrp_linkage: str = "ward",  # Linkage method for HRP optimizer
         max_weight: float = 0.9,
         risk_model: RiskModel | None = None,
-    ):
+    ) -> None:
         super().__init__(max_weight=max_weight, risk_model=risk_model)
         self.strategies = strategies
         self.ensemble_optimizer = ensemble_optimizer

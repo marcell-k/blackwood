@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pandas as pd
@@ -8,13 +8,11 @@ import pandas as pd
 from blackwood.config import CASH
 from blackwood.data.splitters import CPCVSplitter
 from blackwood.optimization.walk_forward import WalkForwardOptimizer
-from blackwood.typing import CPCVPaths
 
 if TYPE_CHECKING:
     from backtesting import Strategy
 
-if TYPE_CHECKING:
-    from backtesting import Strategy
+    from blackwood.typing import CPCVPaths, PathResults
 
 
 class CPCVAnalyzer:
@@ -71,15 +69,15 @@ class CPCVAnalyzer:
 
         return self
 
-    def get_path_results(self):
+    def get_path_results(self) -> PathResults:
         """Retrieve per-path results (fold count, final equity, path metrics, parameters)."""
-        return self._path_results
+        return cast("PathResults", self._path_results)
 
-    def get_aggregated_metrics(self):
+    def get_aggregated_metrics(self) -> dict[str, float] | None:
         """Retrieve cross-path aggregated metrics (mean/median return, Sharpe, Calmar, etc.)."""
         return self._aggregated_metrics
 
-    def get_best_path(self):
+    def get_best_path(self) -> dict[str, Any] | None:
         """Retrieve best path selection based on composite normalized scoring."""
         return self._best_path_info
 
@@ -291,8 +289,9 @@ class CPCVAnalyzer:
         }
 
     # ---------- CPCV Split + WFO Orchestration ----------
-
-    def _run_wfo_on_paths(self, cpcv_paths: CPCVPaths) -> tuple[dict[int, dict], dict[str, float], dict[str, Any]]:
+    def _run_wfo_on_paths(
+        self, cpcv_paths: CPCVPaths
+    ) -> tuple[dict[int, dict[Any, Any]], dict[str, float], dict[str, Any]]:
         """Run Enhanced WFO across CPCV paths."""
         path_results: dict[int, dict] = {}
         aggregated_data: dict[str, list[float]] = {"final_equities": [], "processing_times": [], "path_ids": []}
@@ -382,6 +381,7 @@ class CPCVAnalyzer:
             for k, v in path_metrics.items():
                 aggregated_data.setdefault(k, []).append(v)
 
+        path_results = path_results
         aggregated_metrics = self._aggregate_across_paths(aggregated_data)
         best_path_info = self._score_paths(path_results) if aggregated_metrics else {}
         return path_results, aggregated_metrics, best_path_info
