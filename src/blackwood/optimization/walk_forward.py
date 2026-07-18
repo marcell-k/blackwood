@@ -8,7 +8,7 @@ import pandas as pd
 from blackwood.config import CASH, IS_MONTHS, MARGIN, OOS_MONTHS
 from blackwood.data.splitters import CPCVSplitter
 from blackwood.optimization.optimization import SamboOptimizer
-from blackwood.typing import CPCVPaths
+from blackwood.typing import WFOResult
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -16,13 +16,7 @@ if TYPE_CHECKING:
     from backtesting import Backtest, Strategy
 
     from blackwood.metrics.core import Stats
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from backtesting import Backtest, Strategy
-
-    from blackwood.metrics.core import Stats
+    from blackwood.typing import CPCVPaths, PathResults
 
 
 class WalkForwardOptimizer:
@@ -93,9 +87,7 @@ class WalkForwardOptimizer:
         verbose: bool = True,
         use_validation: bool = False,
         val_dfs: list[pd.DataFrame] | None = None,
-    ) -> tuple[
-        pd.DataFrame, list[dict[str, Any]], list[dict[str, Any]], list[list[Any]], list[Backtest], list[str], list[Any]
-    ]:
+    ) -> WFOResult:
         if use_validation:
             if val_dfs is None or len(val_dfs) != len(self.train_dfs):
                 raise ValueError(f"use_validation=True requires val_dfs of length {len(self.train_dfs)}")
@@ -203,7 +195,7 @@ class WalkForwardOptimizer:
 
         trades_combined = pd.concat(trades_test_list, ignore_index=True) if trades_test_list else pd.DataFrame()
         self.param_names = param_names
-        return (
+        return WFOResult(
             trades_combined,
             self.stats_train_list,
             self.stats_test_list,
@@ -462,7 +454,7 @@ class CPCVAnalyzer:
         self._path_results, self._aggregated_metrics, self._best_path_info = self._run_wfo_on_paths(cpcv_paths)
         return self
 
-    def get_path_results(self) -> dict[int, dict]:
+    def get_path_results(self) -> PathResults:
         return self._path_results or {}
 
     def get_aggregated_metrics(self) -> dict[str, float]:
@@ -599,8 +591,8 @@ class CPCVAnalyzer:
             "best_final_equity": path_results[best_pid]["final_equity"],
         }
 
-    def _run_wfo_on_paths(self, cpcv_paths: CPCVPaths) -> tuple[dict[int, dict], dict[str, float], dict[str, Any]]:
-        path_results: dict[int, dict] = {}
+    def _run_wfo_on_paths(self, cpcv_paths: CPCVPaths) -> tuple[PathResults, dict[str, float], dict[str, Any]]:
+        path_results: PathResults = {}
         aggregated_data: dict[str, list[Any]] = {"final_equities": [], "processing_times": [], "path_ids": []}
 
         for pid, folds in cpcv_paths.items():

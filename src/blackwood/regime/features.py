@@ -1,3 +1,5 @@
+from typing import cast
+
 import numpy as np
 import pandas as pd
 
@@ -28,14 +30,13 @@ class RegimeFeatureEngineer:
         """
         features = pd.DataFrame(index=df.index)
         close = df["Close"]
-        log_returns = np.log(df["Close"]).diff()
+        log_returns = cast("pd.Series", np.log(df["Close"]).diff())
 
         features["atr_5"] = calculate_atr(df, atr_length=5) / close
         features["atr_14"] = calculate_atr(df, atr_length=14) / close
         features["atr_21"] = calculate_atr(df, atr_length=21) / close
         features["atr_40"] = calculate_atr(df, atr_length=40) / close
 
-        log_returns = np.log(close / close.shift(1))
         realized_vol = log_returns.rolling(20, min_periods=10).std() * np.sqrt(252)
         features["realized_vol_20"] = realized_vol
 

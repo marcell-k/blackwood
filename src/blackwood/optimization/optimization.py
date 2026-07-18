@@ -18,6 +18,7 @@ from plotly.subplots import make_subplots
 from scipy.ndimage import generic_filter
 
 from blackwood.config import RANDOM_STATE
+from blackwood.typing import BacktestFunc
 from blackwood.visualization.style import DEFAULT_STYLE, PlotStyle
 
 if TYPE_CHECKING:
@@ -373,7 +374,7 @@ class OptimizerVisualizer:
 
 
 class BaseOptimizer:
-    def __init__(self, bt_func: Callable | None = None) -> None:
+    def __init__(self, bt_func: BacktestFunc | None = None) -> None:
         self.bt_func = bt_func
         self.style = DEFAULT_STYLE
         self.visualizer = OptimizerVisualizer(self.style)
@@ -432,8 +433,8 @@ class SamboOptimizer(BaseOptimizer):
         commission: float | tuple[float, float] | Callable = 0.0,
         trade_on_close: bool = True,
         exclusive_orders: bool = False,
-        bt_func: Callable | None = None,
-    ):
+        bt_func: BacktestFunc | None = None,
+    ) -> None:
         super().__init__(bt_func=bt_func)
         self.margin = float(margin)
         self.spread = float(spread)
@@ -600,7 +601,7 @@ class SamboOptimizer(BaseOptimizer):
 class GridOptimizer(BaseOptimizer):
     """Exhaustive Cartesian grid search over a ParameterSpace using bt_func(**bt_kwargs, **params)."""
 
-    def __init__(self, bt_func: Callable) -> None:
+    def __init__(self, bt_func: BacktestFunc) -> None:
         super().__init__(bt_func=bt_func)
 
     def optimize(
@@ -711,7 +712,7 @@ class GridOptimizer(BaseOptimizer):
 class OptunaOptimizer(BaseOptimizer):
     """Bayesian optimization via Optuna over ParameterSpace using bt_func(**bt_kwargs, **params)."""
 
-    def __init__(self, bt_func: Callable) -> None:
+    def __init__(self, bt_func: BacktestFunc) -> None:
         super().__init__(bt_func=bt_func)
         self.study: Any | None = None
         self.param_space: ParameterSpace = {}

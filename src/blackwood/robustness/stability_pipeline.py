@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 from sklearn.neighbors import BallTree
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 
 if not os.environ.get("MPLCONFIGDIR"):
     _MPL_CACHE_DIR = os.path.join(tempfile.gettempdir(), "matplotlib-cache")
@@ -25,13 +25,16 @@ from blackwood.data.splitters import CPCVSplitter
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from types import ModuleType
 
     from matplotlib.figure import Figure
+
+    from blackwood.typing import BacktestFunc, BacktestStats, StabilityMetrics
 
 _FOLD_COL_RE = re.compile(r"^fold_(\d+)_(\d+)_sharpe$")
 
 
-def _get_plotting_tools(force_agg: bool = False):
+def _get_plotting_tools(force_agg: bool = False) -> tuple:
     """Lazy-load Matplotlib and project styling."""
     import matplotlib.pyplot as plt
 
@@ -42,7 +45,9 @@ def _get_plotting_tools(force_agg: bool = False):
     return plt, DEFAULT_STYLE
 
 
-def _finalize_plot(fig: Figure, plt: Any, show: bool, fallback_filename: str, use_tight_layout: bool = True) -> None:
+def _finalize_plot(
+    fig: Figure, plt: ModuleType, show: bool, fallback_filename: str, use_tight_layout: bool = True
+) -> None:
     if use_tight_layout:
         plt.tight_layout()
     if not show:
@@ -61,17 +66,24 @@ def extract_param_cols(df: pd.DataFrame, param_space: dict[str, Any]) -> list[st
     return [c for c in df.columns if c in param_space]
 
 
-_VALID_IS_PERF_METRICS = {"blend", "median", "p25", "mean", "sharpe_ulcer_80_20", "sharpe_ulcer"}
+_VALID_IS_PERF_METRICS = {
+    "blend",
+    "median",
+    "p25",
+    "mean",
+    "sharpe_ulcer_80_20",
+    "sharpe_ulcer",
+}
 
 
-def _normalize_is_perf_metric(metric: Any) -> str:
+def _normalize_is_perf_metric(metric: str) -> str:
     metric_str = str(metric).strip().lower()
     if metric_str == "sharpe_ulcer":
         return "sharpe_ulcer_80_20"
     return metric_str if metric_str in _VALID_IS_PERF_METRICS else "blend"
 
 
-def _normalize_blend_weights(weights: Any) -> tuple[float, float]:
+def _normalize_blend_weights(weights: tuple[float, float]) -> tuple[float, float]:
     try:
         w_med, w_p25 = float(weights[0]), float(weights[1])
     except Exception:
@@ -153,7 +165,12 @@ def _resolve_is_perf(df: pd.DataFrame, config: StabilityConfig) -> tuple[pd.Seri
         )
 
     if policy == "sharpe_ulcer_80_20":
-        sharpe_pref = ("cpcv_sharpe_blend", "cpcv_sharpe_median", "cpcv_sharpe_p25", "mean_sharpe")
+        sharpe_pref = (
+            "cpcv_sharpe_blend",
+            "cpcv_sharpe_median",
+            "cpcv_sharpe_p25",
+            "mean_sharpe",
+        )
         sharpe_col = next((c for c in sharpe_pref if c in df_out.columns), "none")
         sharpe_vals = (
             pd.to_numeric(df_out[sharpe_col], errors="coerce")
@@ -167,14 +184,38 @@ def _resolve_is_perf(df: pd.DataFrame, config: StabilityConfig) -> tuple[pd.Seri
             ulcer_norm = _minmax_normalize(ulcer_vals.to_numpy(dtype=float), lower_is_better=True)
             combined = 0.8 * sharpe_norm + 0.2 * ulcer_norm
             combined = np.where(np.isfinite(combined), combined, sharpe_norm)
-            return pd.Series(combined, index=df_out.index), policy, f"{sharpe_col}+{ulcer_col}"
+            return (
+                pd.Series(combined, index=df_out.index),
+                policy,
+                f"{sharpe_col}+{ulcer_col}",
+            )
         return sharpe_vals, policy, sharpe_col
 
     preference = {
-        "blend": ("cpcv_sharpe_blend", "cpcv_sharpe_median", "cpcv_sharpe_p25", "mean_sharpe"),
-        "median": ("cpcv_sharpe_median", "cpcv_sharpe_blend", "cpcv_sharpe_p25", "mean_sharpe"),
-        "p25": ("cpcv_sharpe_p25", "cpcv_sharpe_blend", "cpcv_sharpe_median", "mean_sharpe"),
-        "mean": ("mean_sharpe", "cpcv_sharpe_blend", "cpcv_sharpe_median", "cpcv_sharpe_p25"),
+        "blend": (
+            "cpcv_sharpe_blend",
+            "cpcv_sharpe_median",
+            "cpcv_sharpe_p25",
+            "mean_sharpe",
+        ),
+        "median": (
+            "cpcv_sharpe_median",
+            "cpcv_sharpe_blend",
+            "cpcv_sharpe_p25",
+            "mean_sharpe",
+        ),
+        "p25": (
+            "cpcv_sharpe_p25",
+            "cpcv_sharpe_blend",
+            "cpcv_sharpe_median",
+            "mean_sharpe",
+        ),
+        "mean": (
+            "mean_sharpe",
+            "cpcv_sharpe_blend",
+            "cpcv_sharpe_median",
+            "cpcv_sharpe_p25",
+        ),
     }[policy]
     for col in preference:
         if col in df_out.columns:
@@ -287,7 +328,7 @@ class BacktestRunner:
         strategy = type("_S", (base_cls,), dict(params))
         return strategy
 
-    def run(self, df: pd.DataFrame, strategy_class: type[Strategy], params: dict[str, Any]) -> dict:
+    def run(self, df: pd.DataFrame, strategy_class: type[Strategy], params: dict[str, Any]) -> BacktestStats:
         bt = Backtest(
             df,
             self._make_dynamic_strategy(strategy_class, params),
@@ -299,6 +340,17 @@ class BacktestRunner:
             trade_on_close=True,
         )
         return bt.run()
+
+    def as_bt_func(self, strategy_class: type[Strategy]) -> BacktestFunc:
+        """Return a `bt_func`-shaped closure bound to `strategy_class`, for use with GridOptimizer/OptunaOptimizer."""
+
+        def _run(
+            df: pd.DataFrame, strat: type[Strategy] | None = None, cash: float | None = None, **params
+        ) -> BacktestStats:
+            del strat, cash  # cash/margin/commission come from self.config
+            return self.run(df, strategy_class, params)
+
+        return _run
 
 
 class ParameterPerturber:
@@ -371,12 +423,7 @@ class DualFilterSelector:
         return BallTree(normalized_params.astype(np.float64), metric="manhattan")
 
     def _calculate_proximity_stability(
-        self,
-        df: pd.DataFrame,
-        param_cols: list,
-        fold_cols: list,
-        tree: BallTree,
-        normalized_params: np.ndarray,
+        self, df: pd.DataFrame, param_cols: list, fold_cols: list, tree: BallTree, normalized_params: np.ndarray
     ) -> np.ndarray:
         n_samples = len(df)
         radius_threshold = self.config.stability_radius_per_dim * len(param_cols)
@@ -627,23 +674,17 @@ class PnLBootstrapValidator:
 
         rng = np.random.default_rng(seed)
         T = len(log_returns)
-        sharpe_vals: list[float] = []
-        calmar_vals: list[float] = []
-        for _ in range(n_iterations):
-            sampled_log_returns = self._stationary_block_resample(
-                log_returns,
-                n_samples=T,
-                avg_block_length=block_length,
-                rng=rng,
+        sampled_matrix = np.empty((n_iterations, T), dtype=float)
+        for i in range(n_iterations):
+            sampled_matrix[i] = self._stationary_block_resample(
+                log_returns, n_samples=T, avg_block_length=block_length, rng=rng
             )
-            sharpe, calmar = self._compute_single_path_metrics(sampled_log_returns, initial_equity=initial_equity)
-            if np.isfinite(sharpe):
-                sharpe_vals.append(float(sharpe))
-            if np.isfinite(calmar):
-                calmar_vals.append(float(calmar))
 
-        valid_sharpes = np.asarray(sharpe_vals, dtype=float)
-        valid_calmars = np.asarray(calmar_vals, dtype=float)
+        equity_batch = float(initial_equity) * np.exp(np.cumsum(sampled_matrix, axis=1))
+        sharpe_arr, calmar_arr = self._compute_batch_metrics(sampled_matrix, equity_batch)
+
+        valid_sharpes = sharpe_arr[np.isfinite(sharpe_arr)]
+        valid_calmars = calmar_arr[np.isfinite(calmar_arr)]
 
         if len(valid_sharpes) > 0:
             mean_sharpe = float(np.mean(valid_sharpes))
@@ -697,9 +738,7 @@ class PnLBootstrapValidator:
 
     @staticmethod
     def _compute_single_path_metrics(
-        log_returns: np.ndarray,
-        initial_equity: float,
-        annual_days: int = 252,
+        log_returns: np.ndarray, initial_equity: float, annual_days: int = 252
     ) -> tuple[float, float]:
         """Annualized Sharpe and Calmar for one bootstrap path."""
         log_returns = np.asarray(log_returns, dtype=float)
@@ -792,10 +831,8 @@ def _cpcv_path_worker(
         tqdm(folds, desc=f"Path {path_id}", unit="fold", position=1, leave=False)
     ):
 
-        def bt_func_train(df: pd.DataFrame = train_df, **params):
+        def bt_func_train(df: pd.DataFrame = train_df, **params) -> BacktestStats:
             return runner.run(df, strategy_class, params)
-
-        optimizer = OptunaOptimizer(bt_func=bt_func_train)
 
         optimizer = OptunaOptimizer(bt_func=bt_func_train)
         optimizer.optimize(
@@ -888,100 +925,148 @@ class OOSValidator:
         is_metrics: dict[tuple, dict[str, float]],
     ) -> pd.DataFrame:
         param_cols = extract_param_cols(paramsets, self.param_space)
-        results = []
+        row_dicts = paramsets.to_dict("records")
 
-        for row_dict in paramsets.to_dict("records"):
-            params = {col: row_dict[col] for col in param_cols}
-            param_key = tuple(sorted(params.items()))
-
-            try:
-                stats = self.runner.run(holdout_df, strategy_class, params)
-
-                oos_maxdd_raw = float(stats.get("Max. Drawdown [%]", np.nan))
-                oos_maxdd = abs(oos_maxdd_raw) if np.isfinite(oos_maxdd_raw) else np.nan
-                oos_maxdd_frac = oos_maxdd / 100.0 if np.isfinite(oos_maxdd) else np.nan
-                oos_sharpe = float(stats.get("Sharpe Ratio", np.nan))
-                oos_calmar = float(stats.get("Calmar Ratio", np.nan))
-                oos_return = float(stats.get("Return (Ann.) [%]", np.nan))
-                oos_winrate = float(stats.get("Win Rate [%]", np.nan))
-                oos_trades = int(stats.get("# Trades", 0))
-
-                cached = is_metrics.get(param_key, {})
-                is_sharpe = cached.get("sharpe", np.nan)
-                is_calmar = cached.get("calmar", np.nan)
-                is_return = cached.get("return", np.nan)
-
-                deg_sharpe = self._safe_ratio(oos_sharpe, is_sharpe)
-                deg_calmar = self._safe_ratio(oos_calmar, is_calmar)
-                deg_return = self._safe_ratio(oos_return, is_return)
-
-                pass_oos = (
-                    np.isfinite(oos_sharpe)
-                    and oos_sharpe >= self.config.oos_sharpe_min
-                    and np.isfinite(deg_sharpe)
-                    and deg_sharpe >= self.config.oos_degradation_min
-                    and oos_trades >= 10
+        if self.config.n_jobs == 1:
+            results = [
+                self._evaluate_candidate(row_dict, param_cols, holdout_df, strategy_class, is_metrics)
+                for row_dict in row_dicts
+            ]
+        else:
+            n_workers = self.config.n_jobs if self.config.n_jobs > 0 else -1
+            results = Parallel(n_jobs=n_workers, backend="loky", verbose=0)(
+                delayed(_oos_candidate_worker)(
+                    row_dict=row_dict,
+                    param_cols=param_cols,
+                    holdout_df=holdout_df,
+                    strategy_class=strategy_class,
+                    param_space=self.param_space,
+                    config=self.config,
+                    is_metrics=is_metrics,
                 )
-
-                neigh_pass_rate, neigh_sharpe_p05, pass_neighborhood = 0.0, np.nan, False
-                if pass_oos and np.isfinite(is_sharpe):
-                    n_neigh = self.config.neigh_n_quick if self.config.quick_mode else self.config.neigh_n
-                    rng = np.random.default_rng(self._neighborhood_seed(param_key))
-                    sharpes: list[float] = []
-                    valid = passed = 0
-                    for _ in range(int(n_neigh)):
-                        p2 = self.perturber.perturb(params, rng)
-                        try:
-                            st2 = self.runner.run(holdout_df, strategy_class, p2)
-                        except Exception:
-                            continue
-                        s2 = float(st2.get("Sharpe Ratio", np.nan))
-                        t2 = int(st2.get("# Trades", 0))
-                        if not np.isfinite(s2):
-                            continue
-                        sharpes.append(s2)
-                        valid += 1
-                        deg2 = self._safe_ratio(s2, is_sharpe)
-                        if (
-                            np.isfinite(deg2)
-                            and s2 >= self.config.oos_sharpe_min
-                            and deg2 >= self.config.oos_degradation_min
-                            and t2 >= 10
-                        ):
-                            passed += 1
-                    if valid > 0:
-                        neigh_pass_rate = passed / valid
-                        neigh_sharpe_p05 = float(np.percentile(sharpes, 5))
-                        pass_neighborhood = neigh_pass_rate >= self.config.neigh_pass_min
-
-            except Exception:
-                results.append(self._failed_oos_result(row_dict, param_key, is_metrics))
-                continue
-
-            results.append(
-                {
-                    **row_dict,
-                    "is_sharpe": is_sharpe,
-                    "is_calmar": is_calmar,
-                    "is_return": is_return,
-                    "oos_sharpe": oos_sharpe,
-                    "oos_calmar": oos_calmar,
-                    "oos_return": oos_return,
-                    "oos_winrate": oos_winrate,
-                    "oos_maxdd": oos_maxdd,
-                    "oos_maxdd_frac": oos_maxdd_frac,
-                    "oos_trades": oos_trades,
-                    "degradation_sharpe": deg_sharpe,
-                    "degradation_calmar": deg_calmar,
-                    "degradation_return": deg_return,
-                    "pass_oos": pass_oos,
-                    "neigh_pass_rate": neigh_pass_rate,
-                    "neigh_sharpe_p05": neigh_sharpe_p05,
-                    "pass_neighborhood": pass_neighborhood,
-                }
+                for row_dict in row_dicts
             )
 
         return pd.DataFrame(results)
+
+    def _evaluate_candidate(
+        self,
+        row_dict: dict,
+        param_cols: list,
+        holdout_df: pd.DataFrame,
+        strategy_class: type[Strategy],
+        is_metrics: dict[tuple, dict[str, float]],
+    ) -> dict:
+        params = {col: row_dict[col] for col in param_cols}
+        param_key = tuple(sorted(params.items()))
+
+        try:
+            stats = self.runner.run(holdout_df, strategy_class, params)
+
+            oos_maxdd_raw = float(stats.get("Max. Drawdown [%]", np.nan))
+            oos_maxdd = abs(oos_maxdd_raw) if np.isfinite(oos_maxdd_raw) else np.nan
+            oos_maxdd_frac = oos_maxdd / 100.0 if np.isfinite(oos_maxdd) else np.nan
+            oos_sharpe = float(stats.get("Sharpe Ratio", np.nan))
+            oos_calmar = float(stats.get("Calmar Ratio", np.nan))
+            oos_return = float(stats.get("Return (Ann.) [%]", np.nan))
+            oos_winrate = float(stats.get("Win Rate [%]", np.nan))
+            oos_trades = int(stats.get("# Trades", 0))
+
+            cached = is_metrics.get(param_key, {})
+            is_sharpe = cached.get("sharpe", np.nan)
+            is_calmar = cached.get("calmar", np.nan)
+            is_return = cached.get("return", np.nan)
+
+            deg_sharpe = self._safe_ratio(oos_sharpe, is_sharpe)
+            deg_calmar = self._safe_ratio(oos_calmar, is_calmar)
+            deg_return = self._safe_ratio(oos_return, is_return)
+
+            pass_oos = (
+                np.isfinite(oos_sharpe)
+                and oos_sharpe >= self.config.oos_sharpe_min
+                and np.isfinite(deg_sharpe)
+                and deg_sharpe >= self.config.oos_degradation_min
+                and oos_trades >= 10
+            )
+
+            neigh_pass_rate, neigh_sharpe_p05, pass_neighborhood = 0.0, np.nan, False
+            if pass_oos and np.isfinite(is_sharpe):
+                n_neigh = self.config.neigh_n_quick if self.config.quick_mode else self.config.neigh_n
+                rng = np.random.default_rng(self._neighborhood_seed(param_key))
+                sharpes: list[float] = []
+                valid = passed = 0
+                for _ in range(int(n_neigh)):
+                    p2 = self.perturber.perturb(params, rng)
+                    try:
+                        st2 = self.runner.run(holdout_df, strategy_class, p2)
+                    except Exception:
+                        continue
+                    s2 = float(st2.get("Sharpe Ratio", np.nan))
+                    t2 = int(st2.get("# Trades", 0))
+                    if not np.isfinite(s2):
+                        continue
+                    sharpes.append(s2)
+                    valid += 1
+                    deg2 = self._safe_ratio(s2, is_sharpe)
+                    if (
+                        np.isfinite(deg2)
+                        and s2 >= self.config.oos_sharpe_min
+                        and deg2 >= self.config.oos_degradation_min
+                        and t2 >= 10
+                    ):
+                        passed += 1
+                if valid > 0:
+                    neigh_pass_rate = passed / valid
+                    neigh_sharpe_p05 = float(np.percentile(sharpes, 5))
+                    pass_neighborhood = neigh_pass_rate >= self.config.neigh_pass_min
+
+        except Exception:
+            return self._failed_oos_result(row_dict, param_key, is_metrics)
+
+        return {
+            **row_dict,
+            "is_sharpe": is_sharpe,
+            "is_calmar": is_calmar,
+            "is_return": is_return,
+            "oos_sharpe": oos_sharpe,
+            "oos_calmar": oos_calmar,
+            "oos_return": oos_return,
+            "oos_winrate": oos_winrate,
+            "oos_maxdd": oos_maxdd,
+            "oos_maxdd_frac": oos_maxdd_frac,
+            "oos_trades": oos_trades,
+            "degradation_sharpe": deg_sharpe,
+            "degradation_calmar": deg_calmar,
+            "degradation_return": deg_return,
+            "pass_oos": pass_oos,
+            "neigh_pass_rate": neigh_pass_rate,
+            "neigh_sharpe_p05": neigh_sharpe_p05,
+            "pass_neighborhood": pass_neighborhood,
+        }
+
+
+def _oos_candidate_worker(
+    row_dict: dict,
+    param_cols: list,
+    holdout_df: pd.DataFrame,
+    strategy_class: type[Strategy],
+    param_space: dict[str, Any],
+    config: StabilityConfig,
+    is_metrics: dict[tuple, dict[str, float]],
+) -> dict:
+    validator = OOSValidator(config, param_space)
+    return validator._evaluate_candidate(row_dict, param_cols, holdout_df, strategy_class, is_metrics)
+
+
+def _reference_train_sharpe_worker(
+    idx: Any, params: dict, reference_train_df: pd.DataFrame, strategy_class: type[Strategy], config: StabilityConfig
+) -> tuple[Any, float]:
+    runner = BacktestRunner(config)
+    try:
+        stats = runner.run(reference_train_df, strategy_class, params)
+        return idx, float(stats.get("Sharpe Ratio", np.nan))
+    except Exception:
+        return idx, np.nan
 
 
 class TierClassifier:
@@ -1043,8 +1128,16 @@ class TierClassifier:
         )
 
         # Aggregated OOS robustness
-        is_sh = df.get("is_sharpe", df.get("cpcv_sharpe_median", df.get("mean_sharpe", np.nan)))
+        _nan_series = pd.Series(np.nan, index=df.index)
+        is_sh = df.get(
+            "is_sharpe",
+            df.get("cpcv_sharpe_median", df.get("mean_sharpe", _nan_series)),
+        )
+        if not isinstance(is_sh, pd.Series):
+            is_sh = _nan_series
         oos_sh = df.get("oos_sharpe", np.nan)
+        if not isinstance(oos_sh, pd.Series):
+            oos_sh = _nan_series
         ratio = np.clip(
             (oos_sh.to_numpy(dtype=float) + eps) / (is_sh.to_numpy(dtype=float) + eps),
             1e-3,
@@ -1148,10 +1241,11 @@ class ParameterStabilityPipeline:
         self.n_cpcv_trials = n_cpcv_trials
         self.config = config or StabilityConfig(n_bootstrap=n_bootstrap)
         self._phase_results: dict[int, PhaseResult] = {}
-        self._train_df: pd.DataFrame | None = None
-        self._holdout_df: pd.DataFrame | None = None
+        self._train_df: pd.DataFrame
+        self._holdout_df: pd.DataFrame
         self._reference_train_df: pd.DataFrame | None = None
-        self._final_ranking: pd.DataFrame | None = None
+        self._final_ranking: pd.DataFrame
+        self._stability_metrics: StabilityMetrics
 
     def run_full_pipeline(
         self,
@@ -1178,8 +1272,16 @@ class ParameterStabilityPipeline:
 
         phases = [
             (1, "PHASE 1: CPCV Execution", self._run_phase1_cpcv),
-            (2, "PHASE 2: Dual Filter Selection", lambda v: self._run_phase2_filters(self._phase_results[1].data, v)),
-            (3, "PHASE 3: Bootstrap Validation", lambda v: self._run_phase3_bootstrap(self._phase_results[2].data, v)),
+            (
+                2,
+                "PHASE 2: Dual Filter Selection",
+                lambda v: self._run_phase2_filters(self._phase_results[1].data, v),
+            ),
+            (
+                3,
+                "PHASE 3: Bootstrap Validation",
+                lambda v: self._run_phase3_bootstrap(self._phase_results[2].data, v),
+            ),
             (
                 4,
                 "PHASE 4: OOS Validation",
@@ -1200,7 +1302,11 @@ class ParameterStabilityPipeline:
             if phase_num <= 2 and (not result.passed or result.data.empty):
                 if verbose:
                     print(f"Phase {phase_num} failed or returned no results. Pipeline terminated.")
-                return {"status": "failed", "phase": phase_num, "results": self._phase_results}
+                return {
+                    "status": "failed",
+                    "phase": phase_num,
+                    "results": self._phase_results,
+                }
 
         self._final_ranking = self._phase_results[5].data
         self._final_ranking = self._attach_reference_train_sharpe(
@@ -1224,7 +1330,11 @@ class ParameterStabilityPipeline:
                     print(label)
                     fn(show=show_plots)
 
-        return {"status": "success", "phase_results": self._phase_results, "final_ranking": self._final_ranking}
+        return {
+            "status": "success",
+            "phase_results": self._phase_results,
+            "final_ranking": self._final_ranking,
+        }
 
     def _run_phase1_cpcv(self, verbose: bool) -> PhaseResult:
 
@@ -1258,17 +1368,23 @@ class ParameterStabilityPipeline:
                 path_seed=seed,
                 constraint=self.constraints,
             )
-            for (path_id, folds), seed in zip(cpcv_paths.items(), path_seed_ints, strict=False)
+            for (path_id, folds), seed in zip(cpcv_paths.items(), path_seed_ints, strict=True)
         )
 
         # Merge path results
         all_param_results: dict[tuple, dict] = {}
         for path_result in path_results:
+            assert path_result is not None, "_run_phase1_cpcv path_result is None"
             for param_key, data in path_result.items():
                 if param_key not in all_param_results:
                     all_param_results[param_key] = data
                 else:
-                    for metric in ("fold_sharpes", "fold_calmars", "fold_returns", "fold_ulcers"):
+                    for metric in (
+                        "fold_sharpes",
+                        "fold_calmars",
+                        "fold_returns",
+                        "fold_ulcers",
+                    ):
                         all_param_results[param_key][metric].update(data[metric])
 
         rows, is_metrics = [], {}
@@ -1285,7 +1401,7 @@ class ParameterStabilityPipeline:
                 arr = arr[np.isfinite(arr)]
                 metrics[metric_name] = arr
 
-            def _safe_stat(arr, fn: Callable) -> float:
+            def _safe_stat(arr: np.ndarray, fn: Callable) -> float:
                 return float(fn(arr)) if len(arr) else np.nan
 
             sharpe_arr = metrics["sharpe"]
@@ -1363,7 +1479,9 @@ class ParameterStabilityPipeline:
             n_iter = 100 if self.config.quick_mode else self.config.n_bootstrap
             print(f" {n_iter} bootstrap iterations * {len(filtered_df)} candidates")
         bootstrap_df = validator.validate_parameters(
-            param_sets=filtered_df, train_df=self._train_df, strategy_class=self.strategy_class
+            param_sets=filtered_df,
+            train_df=self._train_df,
+            strategy_class=self.strategy_class,
         )
         n_passed = int(bootstrap_df["pass_bootstrap"].sum()) if "pass_bootstrap" in bootstrap_df else 0
         if verbose:
@@ -1434,11 +1552,7 @@ class ParameterStabilityPipeline:
         return self._final_ranking.copy() if self._final_ranking is not None else pd.DataFrame()
 
     def _attach_reference_train_sharpe(
-        self,
-        ranked_df: pd.DataFrame,
-        reference_train_df: pd.DataFrame | None,
-        top_n: int = 20,
-        verbose: bool = False,
+        self, ranked_df: pd.DataFrame, reference_train_df: pd.DataFrame | None, top_n: int = 20, verbose: bool = False
     ) -> pd.DataFrame:
         if ranked_df is None or ranked_df.empty:
             return ranked_df
@@ -1465,17 +1579,30 @@ class ParameterStabilityPipeline:
         if top_n_int == 0:
             return enriched
 
-        runner = BacktestRunner(self.config)
+        target_idxs = list(enriched.index[:top_n_int])
+        param_dicts = [{col: enriched.at[idx, col] for col in param_cols} for idx in target_idxs]
+
+        n_workers = self.config.n_jobs if self.config.n_jobs > 0 else -1
+        if self.config.n_jobs == 1:
+            results = [
+                _reference_train_sharpe_worker(idx, params, reference_train_df, self.strategy_class, self.config)
+                for idx, params in zip(target_idxs, param_dicts, strict=True)
+            ]
+        else:
+            results = Parallel(n_jobs=n_workers, backend="loky", verbose=0)(
+                delayed(_reference_train_sharpe_worker)(
+                    idx, params, reference_train_df, self.strategy_class, self.config
+                )
+                for idx, params in zip(target_idxs, param_dicts, strict=True)
+            )
+
         success = 0
-        for idx in enriched.index[:top_n_int]:
-            params = {col: enriched.at[idx, col] for col in param_cols}
-            try:
-                stats = runner.run(reference_train_df, self.strategy_class, params)
-                enriched.at[idx, "full_train_sharpe"] = float(stats.get("Sharpe Ratio", np.nan))
-                success += 1
-            except Exception:
-                enriched.at[idx, "full_train_sharpe"] = np.nan
+        assert results is not None, "_attach_reference_train_sharpe results is None"
+        for idx, sharpe in results:
+            enriched.at[idx, "full_train_sharpe"] = sharpe
             enriched.at[idx, "full_train_basis"] = "original_train_split"
+            if np.isfinite(sharpe):
+                success += 1
 
         if verbose:
             print(f" Added full-train Sharpe for top {top_n_int} candidates ({success}/{top_n_int} successful).")
@@ -1484,7 +1611,13 @@ class ParameterStabilityPipeline:
     def plot_filter_funnel(self, show: bool = True) -> Figure:
         plt, sty = _get_plotting_tools(force_agg=not show)
         fig, ax = plt.subplots(figsize=(10, 6))
-        stage_names = ["Phase 1\nCPCV", "Phase 2\nFilters", "Phase 3\nBootstrap", "Phase 4\nOOS", "Phase 5\nTier 1"]
+        stage_names = [
+            "Phase 1\nCPCV",
+            "Phase 2\nFilters",
+            "Phase 3\nBootstrap",
+            "Phase 4\nOOS",
+            "Phase 5\nTier 1",
+        ]
         counts = []
         for phase in range(1, 6):
             data = self._phase_results.get(phase, PhaseResult("", pd.DataFrame())).data
@@ -1504,7 +1637,11 @@ class ParameterStabilityPipeline:
                 fontsize=12,
             )
         ax.set_ylabel("Number of Parameter Sets", fontsize=12)
-        ax.set_title("Parameter Stability Pipeline - Filter Funnel", fontsize=14, fontweight="bold")
+        ax.set_title(
+            "Parameter Stability Pipeline - Filter Funnel",
+            fontsize=14,
+            fontweight="bold",
+        )
         ax.grid(True, alpha=0.3, axis="y")
         sty.apply_mpl(fig, ax)
         _finalize_plot(fig, plt, show=show, fallback_filename="filter_funnel.png")
@@ -1523,16 +1660,38 @@ class ParameterStabilityPipeline:
         fig, ax = plt.subplots(figsize=(10, 8))
         plot_df = df.dropna(subset=["is_sharpe", "oos_sharpe"])
         if plot_df.empty:
-            ax.text(0.5, 0.5, "No valid data", transform=ax.transAxes, ha="center", va="center")
+            ax.text(
+                0.5,
+                0.5,
+                "No valid data",
+                transform=ax.transAxes,
+                ha="center",
+                va="center",
+            )
             return fig
 
         is_sharpe = plot_df["is_sharpe"].values
         oos_sharpe = plot_df["oos_sharpe"].values
         colors = np.where(plot_df["pass_oos"].values, sty.accent3, sty.accent2)
-        ax.scatter(is_sharpe, oos_sharpe, c=colors, s=80, alpha=0.6, edgecolors="white", linewidth=0.5)
+        ax.scatter(
+            is_sharpe,
+            oos_sharpe,
+            c=colors,
+            s=80,
+            alpha=0.6,
+            edgecolors="white",
+            linewidth=0.5,
+        )
 
-        lo, hi = min(is_sharpe.min(), oos_sharpe.min()), max(is_sharpe.max(), oos_sharpe.max())
-        ax.plot([lo, hi], [lo, hi], "w--", alpha=0.5, linewidth=2, label="No degradation (y=x)")
+        lo, hi = (min(is_sharpe.min(), oos_sharpe.min()), max(is_sharpe.max(), oos_sharpe.max()))
+        ax.plot(
+            [lo, hi],
+            [lo, hi],
+            "w--",
+            alpha=0.5,
+            linewidth=2,
+            label="No degradation (y=x)",
+        )
         deg = self.config.oos_degradation_min
         ax.plot(
             [lo, hi],
@@ -1584,7 +1743,13 @@ class ParameterStabilityPipeline:
         for tier, color in colors_map.items():
             sub = self._final_ranking.query(f"tier == '{tier}'")
             if not sub.empty:
-                ax2.scatter([tier] * len(sub), sub["composite_score"].values, alpha=0.6, s=60, color=color)
+                ax2.scatter(
+                    [tier] * len(sub),
+                    sub["composite_score"].values,
+                    alpha=0.6,
+                    s=60,
+                    color=color,
+                )
         ax2.set_ylabel("Composite Score", fontsize=11)
         ax2.set_title("Composite Scores by Tier", fontsize=12, fontweight="bold")
         ax2.grid(True, alpha=0.3, axis="y")
@@ -1594,7 +1759,10 @@ class ParameterStabilityPipeline:
         top10 = self._final_ranking.head(10)
         y_pos = np.arange(len(top10))
         ax3.barh(
-            y_pos, top10["composite_score"], color=[colors_map.get(t, sty.accent5) for t in top10["tier"]], alpha=0.8
+            y_pos,
+            top10["composite_score"],
+            color=[colors_map.get(t, sty.accent5) for t in top10["tier"]],
+            alpha=0.8,
         )
         ax3.set_yticks(y_pos)
         ax3.set_yticklabels([f"Rank {i + 1} ({t})" for i, t in enumerate(top10["tier"])], fontsize=9)
@@ -1604,7 +1772,18 @@ class ParameterStabilityPipeline:
         for pos, score in zip(y_pos, top10["composite_score"], strict=True):
             ax3.text(score, pos, f" {score:.3f}", va="center", fontsize=9)
 
-        fig.suptitle("Parameter Stability Pipeline - Final Dashboard", fontsize=16, fontweight="bold", y=0.98)
+        fig.suptitle(
+            "Parameter Stability Pipeline - Final Dashboard",
+            fontsize=16,
+            fontweight="bold",
+            y=0.98,
+        )
         sty.apply_mpl(fig)
-        _finalize_plot(fig, plt, show=show, fallback_filename="tier_dashboard.png", use_tight_layout=False)
+        _finalize_plot(
+            fig,
+            plt,
+            show=show,
+            fallback_filename="tier_dashboard.png",
+            use_tight_layout=False,
+        )
         return fig

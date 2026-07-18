@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from matplotlib.figure import Figure
+from matplotlib.pyplot import FuncFormatter
 from plotly.subplots import make_subplots
 from sklearn.metrics import normalized_mutual_info_score
 
@@ -46,7 +48,7 @@ class MonteCarloResults:
 
 
 class PortfolioVisualizer:
-    def __init__(self, all_results: dict, returns: pd.DataFrame):
+    def __init__(self, all_results: dict, returns: pd.DataFrame) -> None:
         self.all_results = all_results
         self.returns = returns
         self.style = DEFAULT_STYLE
@@ -123,7 +125,10 @@ class PortfolioVisualizer:
             fig = make_subplots(
                 rows=2,
                 cols=1,
-                subplot_titles=("Multi-Strategy Equity Curves (Log Scale)", "Drawdown Comparison"),
+                subplot_titles=(
+                    "Multi-Strategy Equity Curves (Log Scale)",
+                    "Drawdown Comparison",
+                ),
                 vertical_spacing=0.08,
                 row_heights=[0.7, 0.3],
                 shared_xaxes=True,
@@ -137,6 +142,8 @@ class PortfolioVisualizer:
             color = self.colors[idx % len(self.colors)]
 
             is_portfolio = any(keyword in name.lower() for keyword in ["portfolio", "combined", "basket"])
+            if name.endswith("_Normalized"):
+                name = name.replace("_Normalized", "")
             line_width = 4 if is_portfolio else 2.5
 
             fig.add_trace(
@@ -217,7 +224,13 @@ class PortfolioVisualizer:
         )
 
         fig.update_xaxes(row=1, col=1, **axis_style, showticklabels=False)
-        fig.update_yaxes(title_text="Equity Value ($) - Log Scale", type="log", row=1, col=1, **axis_style)
+        fig.update_yaxes(
+            title_text="Equity Value ($) - Log Scale",
+            type="log",
+            row=1,
+            col=1,
+            **axis_style,
+        )
 
         if show_drawdown:
             fig.update_xaxes(title_text="Date", row=2, col=1, **axis_style, showticklabels=True)
@@ -244,7 +257,10 @@ class PortfolioVisualizer:
             fig = make_subplots(
                 rows=2,
                 cols=1,
-                subplot_titles=("Normalized Strategies - Equal Volatility (Log Scale)", "Drawdown Comparison"),
+                subplot_titles=(
+                    "Normalized Strategies - Equal Volatility (Log Scale)",
+                    "Drawdown Comparison",
+                ),
                 vertical_spacing=0.08,
                 row_heights=[0.7, 0.3],
                 shared_xaxes=True,
@@ -264,7 +280,7 @@ class PortfolioVisualizer:
                     x=equity.index,
                     y=equity,
                     mode="lines",
-                    name=clean_name,
+                    name=x,
                     legendgroup=clean_name,
                     line=dict(color=color, width=2.5),
                     hovertemplate=("<b>%{fullData.name}</b><br>Date: %{x}<br>Equity: $%{y:,.0f}<br><extra></extra>"),
@@ -297,11 +313,19 @@ class PortfolioVisualizer:
                 )
 
         for rebal_date in rebalance_dates:
-            fig.add_vline(x=rebal_date, line=dict(color="rgba(128, 128, 128, 0.3)", width=1, dash="dash"), row=1, col=1)
+            fig.add_vline(
+                x=rebal_date,
+                line=dict(color="rgba(128, 128, 128, 0.3)", width=1, dash="dash"),
+                row=1,
+                col=1,
+            )
 
             if show_drawdown:
                 fig.add_vline(
-                    x=rebal_date, line=dict(color="rgba(128, 128, 128, 0.3)", width=1, dash="dash"), row=2, col=1
+                    x=rebal_date,
+                    line=dict(color="rgba(128, 128, 128, 0.3)", width=1, dash="dash"),
+                    row=2,
+                    col=1,
                 )
 
         fig.update_layout(
@@ -336,7 +360,13 @@ class PortfolioVisualizer:
         )
 
         fig.update_xaxes(row=1, col=1, **axis_style, showticklabels=False)
-        fig.update_yaxes(title_text="Equity Value ($) - Log Scale", type="log", row=1, col=1, **axis_style)
+        fig.update_yaxes(
+            title_text="Equity Value ($) - Log Scale",
+            type="log",
+            row=1,
+            col=1,
+            **axis_style,
+        )
 
         if show_drawdown:
             fig.update_xaxes(title_text="Date", row=2, col=1, **axis_style, showticklabels=True)
@@ -480,7 +510,9 @@ class PortfolioVisualizer:
 
     def plot_returns_distribution(self) -> go.Figure:
         fig = make_subplots(
-            rows=1, cols=len(self.returns.columns), subplot_titles=[col for col in self.returns.columns]
+            rows=1,
+            cols=len(self.returns.columns),
+            subplot_titles=[col for col in self.returns.columns],
         )
 
         for idx, col in enumerate(self.returns.columns):
@@ -529,7 +561,7 @@ class PortfolioVisualizer:
         self.style.apply(fig)
         return fig
 
-    def show_all_plots(self):
+    def show_all_plots(self) -> None:
         self.plot_equity_and_drawdown().show()
 
         for strategy_name in self.all_results:
@@ -543,7 +575,7 @@ class PortfolioVisualizer:
         n_bins: int = 10,
         filter_type: str = "all",
         method: Literal["arithmetic", "geometric", "min", "max"] = "arithmetic",
-    ):
+    ) -> Figure | None:
         """
         Plot Pearson correlation and NMI matrices using Matplotlib.
         """
@@ -630,16 +662,13 @@ class PortfolioVisualizer:
         cbar1.set_label("NMI")
 
         fig.suptitle("Dependency Analysis", fontsize=18, color=DEFAULT_STYLE.font_color)
-        fig.tight_layout(rect=[0, 0, 1, 0.95])
+        fig.tight_layout(rect=(0, 0, 1, 0.95))
         DEFAULT_STYLE.apply_mpl(fig)
         return fig
 
     def plot_rolling_correlation(
-        self,
-        rebalance_freq: str = "QE",
-        filter_type: str = "normalized",
-        window: int = 60,
-    ):
+        self, rebalance_freq: str = "QE", filter_type: str = "normalized", window: int = 60
+    ) -> Figure | None:
         """
         Plot rolling correlation at rebalance frequency using Matplotlib.
         """
@@ -713,10 +742,7 @@ class PortfolioVisualizer:
         DEFAULT_STYLE.apply_mpl(fig)
         return fig
 
-    def plot_consecutive_drawdown_days_distribution(
-        self,
-        portfolio_name: str,
-    ):
+    def plot_consecutive_drawdown_days_distribution(self, portfolio_name: str) -> Figure | None:
 
         equity = self.all_results[portfolio_name]["results"]["equity"]
         dd = self._calculate_drawdown(equity)
@@ -779,10 +805,7 @@ class PortfolioVisualizer:
         DEFAULT_STYLE.apply_mpl(fig)
         return fig
 
-    def plot_drawdown_duration_distribution(
-        self,
-        portfolio_name: str,
-    ):
+    def plot_drawdown_duration_distribution(self, portfolio_name: str) -> Figure | None:
         equity = self.all_results[portfolio_name]["results"]["equity"].copy()
         running_max = equity.cummax()
 
@@ -854,10 +877,7 @@ class PortfolioVisualizer:
         DEFAULT_STYLE.apply_mpl(fig)
         return fig
 
-    def plot_leverage_and_volatility(
-        self,
-        portfolio_name: str,
-    ):
+    def plot_leverage_and_volatility(self, portfolio_name: str) -> Figure:
         # --- 1. Extract data ---
         leverage_history = self.all_results[portfolio_name]["results"]["leverage_history"]
 
@@ -869,7 +889,10 @@ class PortfolioVisualizer:
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 9), sharex=True)
 
         fig.suptitle(
-            f"Leverage & Volatility Analysis for: {portfolio_name}", fontsize=18, y=0.98, color=DEFAULT_STYLE.font_color
+            f"Leverage & Volatility Analysis for: {portfolio_name}",
+            fontsize=18,
+            y=0.98,
+            color=DEFAULT_STYLE.font_color,
         )
 
         # --- Top: Leverage ---
@@ -911,7 +934,7 @@ class PortfolioVisualizer:
         ax2.grid(True, which="both")
         ax2.legend()
 
-        ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.1%}"))
+        ax2.yaxis.set_major_formatter(FuncFormatter(lambda y, _: f"{y:.1%}"))
 
         # --- X-axis formatting ---
         ax2.set_xlabel("Date")
@@ -920,11 +943,11 @@ class PortfolioVisualizer:
         plt.setp(ax2.get_xticklabels(), rotation=45, ha="right")
 
         # --- Layout ---
-        fig.tight_layout(rect=[0, 0, 1, 0.95])
+        fig.tight_layout(rect=(0, 0, 1, 0.95))
         DEFAULT_STYLE.apply_mpl(fig)
         return fig
 
-    def plot_monte_carlo_results(self, mc_results: MonteCarloResults):
+    def plot_monte_carlo_results(self, mc_results: MonteCarloResults) -> Figure:
         """
         Visualizes Monte Carlo simulation results using matplotlib (2x2 layout).
 
@@ -962,16 +985,45 @@ class PortfolioVisualizer:
         ax_maxdd, ax_avgdd = axes[1]
 
         # Panel 1: Equity curves
-        ax_eq.fill_between(dates, equity_p05, equity_p95, alpha=0.15, label="5–95%", color=DEFAULT_STYLE.accent1)
-        ax_eq.fill_between(dates, equity_p25, equity_p75, alpha=0.30, label="25–75%", color=DEFAULT_STYLE.accent1)
+        ax_eq.fill_between(
+            dates,
+            equity_p05,
+            equity_p95,
+            alpha=0.15,
+            label="5-95%",
+            color=DEFAULT_STYLE.accent1,
+        )
+        ax_eq.fill_between(
+            dates,
+            equity_p25,
+            equity_p75,
+            alpha=0.30,
+            label="25-75%",
+            color=DEFAULT_STYLE.accent1,
+        )
 
-        ax_eq.plot(dates, equity_p50, linestyle="--", linewidth=1, label="Median", color=DEFAULT_STYLE.paper_bgcolor)
         ax_eq.plot(
-            dates, mc_results.actual_equity.values, linewidth=2.5, label="Actual Strategy", color=DEFAULT_STYLE.accent1
+            dates,
+            equity_p50,
+            linestyle="--",
+            linewidth=1,
+            label="Median",
+            color=DEFAULT_STYLE.paper_bgcolor,
+        )
+        ax_eq.plot(
+            dates,
+            mc_results.actual_equity.values,
+            linewidth=2.5,
+            label="Actual Strategy",
+            color=DEFAULT_STYLE.accent1,
         )
 
         ax_eq.set_yscale("log")
-        ax_eq.set_title("Monte Carlo Equity Curve Distribution", color=DEFAULT_STYLE.font_color, fontsize=18)
+        ax_eq.set_title(
+            "Monte Carlo Equity Curve Distribution",
+            color=DEFAULT_STYLE.font_color,
+            fontsize=18,
+        )
         ax_eq.set_xlabel("Date")
         ax_eq.set_ylabel("Equity ($)")
         ax_eq.legend(frameon=False)
@@ -983,12 +1035,22 @@ class PortfolioVisualizer:
         ax_dd.plot(dates, dd_p50, linestyle="--", linewidth=1, color="#ba2b2b")
         ax_dd.plot(dates, actual_dd, linewidth=2.5, color=DEFAULT_STYLE.accent4)
 
-        ax_dd.set_title("Monte Carlo Drawdown Distribution", color=DEFAULT_STYLE.font_color, fontsize=25)
+        ax_dd.set_title(
+            "Monte Carlo Drawdown Distribution",
+            color=DEFAULT_STYLE.font_color,
+            fontsize=25,
+        )
         ax_dd.set_xlabel("Date")
         ax_dd.set_ylabel("Drawdown (%)")
 
         # Panel 3: Maximum drawdown histogram
-        ax_maxdd.hist(mc_results.simulated_max_dd, bins=50, log=True, alpha=0.85, color=DEFAULT_STYLE.accent4)
+        ax_maxdd.hist(
+            mc_results.simulated_max_dd,
+            bins=50,
+            log=True,
+            alpha=0.85,
+            color=DEFAULT_STYLE.accent4,
+        )
 
         ax_maxdd.axvline(
             mc_results.actual_max_dd,

@@ -1,4 +1,4 @@
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pandas as pd
@@ -11,6 +11,9 @@ from blackwood.portfolio.optimizer import (
     OptimizationStrategy,
 )
 from blackwood.portfolio.risk_allocator import CentralRiskAllocator
+
+if TYPE_CHECKING:
+    from blackwood.typing import RiskRulesConfig
 
 
 class PortfolioBacktester:
@@ -43,7 +46,7 @@ class PortfolioBacktester:
         return ts_utc.normalize()
 
     @staticmethod
-    def _normalize_risk_rules(risk_rules: dict[str, Any] | None, annualization_factor: float) -> dict[str, Any]:
+    def _normalize_risk_rules(risk_rules: dict[str, Any] | None, annualization_factor: float) -> "RiskRulesConfig":
         defaults: dict[str, Any] = {
             "enabled": False,
             "intraday_mode": False,
@@ -66,11 +69,7 @@ class PortfolioBacktester:
         config["half_risk_off_drawdown"] = float(config.get("half_risk_off_drawdown", 0.070))
         config["half_risk_multiplier"] = float(config.get("half_risk_multiplier", 0.5))
         config["timeframe"] = str(config.get("timeframe", "30min")).strip()
-
-        if not config["enabled"]:
-            return config
-
-        return config
+        return cast("RiskRulesConfig", config)
 
     @staticmethod
     def _resample_returns(returns: pd.DataFrame, timeframe: str) -> pd.DataFrame:
@@ -225,7 +224,7 @@ class PortfolioBacktester:
 
     def _rebalance_step(
         self,
-        date,
+        date: pd.Timestamp,
         i: int,
         returns: pd.DataFrame,
         strategies_rebalancing_today: list[str],
