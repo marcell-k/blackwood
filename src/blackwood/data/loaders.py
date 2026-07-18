@@ -67,6 +67,7 @@ def load_security(
     use_news: bool = True,
     session_hours: Literal[False] | tuple[int, int] = False,
     is_stocks: bool = False,
+    file_granularity: str | None = None,
 ) -> SecurityData:
     rule = resample_rule if resample_rule else "D"
 
@@ -84,15 +85,16 @@ def load_security(
         commission = (0, 0)
         currencies = ("USD", "")
     else:
-        file_granularity = "M5" if base_path == _DATA_DIR else "M15"
         default_tz = TIMEZONE_INSTRUMENT.get(security)
         spread = BROKER_SPREADS.get(security) or 0.0
         commission = BROKER_COMMISSION.get(security) or (0.0, 0.0)
         currencies = NEWS_CURRENCIES.get(security, ("", ""))
 
     tz = timezone or default_tz
-
-    file_path = f"{base_path}/{security}_{file_granularity}.csv"
+    if file_granularity is None:
+        file_path = f"{base_path}/{security}.csv"
+    else:
+        file_path = f"{base_path}/{security}_{file_granularity}.csv"
     try:
         # Shallow copy protects cached source while avoiding repeat disk parsing.
         df = _load_price_csv_cached(file_path).copy(deep=False)
