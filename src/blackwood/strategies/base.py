@@ -83,14 +83,9 @@ class MetaLabeling(BaseTemplateStrategy):
 
 
 class BuyAndHoldStrategy(Strategy):
-    def __init__(self) -> None:
-        """Initialize strategy - no indicators needed for Buy & Hold"""
-        pass
+    def init(self) -> None:
+        """No indicators needed for Buy & Hold."""
 
     def next(self) -> None:
-        """Execute strategy logic on each bar"""
-        # Enter long position on first opportunity if not already positioned
         if not self.position:
-            self.buy()  # Buy with all available capital
-
-        # Hold position - no selling logic needed
+            self.buy(size=0.01)
