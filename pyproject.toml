@@ -7,7 +7,7 @@ name = "blackwood"
 version = "0.1.0"
 description = "Quantitative trading research toolkit"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 license = { file = "LICENSE.md" }
 authors = [{ name = "Marcell Kele" }]
 classifiers = [
@@ -26,6 +26,8 @@ dependencies = [
   "scikit-learn>=1.5",
   "scipy>=1.13",
   "statsmodels>=0.14.6",
+  "backtesting",
+  "numba>=0.66.0",
 ]
 
 [project.optional-dependencies]
@@ -33,6 +35,7 @@ viz = [
   "matplotlib>=3.9",
   "plotly>=5.22",
   "seaborn>=0.13.2",
+  "nbformat>=5.7",
 ]
 
 portfolio = [
@@ -93,7 +96,7 @@ select = [
 ignore = ["ANN101", "ANN102", "ANN003", "ANN002"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["ANN"] 
+"tests/**" = ["ANN"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["blackwood"]
@@ -109,3 +112,5 @@ exclude_lines = [
   "@overload",
 ]
 
+[tool.uv.sources]
+backtesting = { git = "ssh://git@github.com/marcell-k/backtesting.git" }
