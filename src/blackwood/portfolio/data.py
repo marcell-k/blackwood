@@ -6,9 +6,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.figure import Figure
 from numba import njit
 from scipy.stats import entropy
 from sklearn.feature_selection import mutual_info_regression
+
+from blackwood.visualization.style import DEFAULT_STYLE
+
+
+def apply_style(fig: Figure) -> Figure:
+    """Apply default dark theme to a Matplotlib figure."""
+    return DEFAULT_STYLE.apply_mpl(fig)
 
 
 def load_strategy_files(
@@ -99,9 +107,7 @@ def load_strategy_files(
 
 
 def normalize_equity_curves(
-    equity_dict: dict[str, pd.Series],
-    target_vol: float,
-    lookback_days: int = 252,
+    equity_dict: dict[str, pd.Series], target_vol: float, lookback_days: int = 252
 ) -> dict[str, pd.Series]:
     """
     Normalize equity curves to target annual volatility.
@@ -147,7 +153,9 @@ def normalize_equity_curves(
 
         # Align with original index (forward-fill warm-up period)
         normalized_equity = pd.Series(
-            data=normalized_equity.values, index=scaled_log_returns.index, name=equity_series.name
+            data=normalized_equity.values,
+            index=scaled_log_returns.index,
+            name=equity_series.name,
         )
         normalized_equity = normalized_equity.reindex(equity_series.index, method="ffill")
 
@@ -157,7 +165,7 @@ def normalize_equity_curves(
 
 
 class EntropyCore:
-    def __init__(self, n_bins: int = 5):
+    def __init__(self, n_bins: int = 5) -> None:
         self.n_bins = n_bins
 
     @staticmethod
@@ -195,9 +203,7 @@ class EntropyCore:
     @staticmethod
     @njit
     def _joint_entropy_from_bins(x_bins: np.ndarray, y_bins: np.ndarray, n_bins: int) -> float:
-        """
-        Joint entropy H(X,Y) using 2D histogram encoding.
-        """
+        """Joint entropy H(X,Y) using 2D histogram encoding."""
         joint_idx = x_bins * n_bins + y_bins
         counts = np.bincount(joint_idx, minlength=n_bins * n_bins)
         probs = counts / x_bins.size
@@ -209,9 +215,7 @@ class EntropyCore:
         return h
 
     def discrete_mi(self, x: np.ndarray, y: np.ndarray) -> float:
-        """
-        Mutual Information using uniform binning (deterministic, O(n)).
-        """
+        """Mutual Information using uniform binning (deterministic, O(n))."""
         x_binned = self._uniform_bin_1d(x, self.n_bins)
         y_binned = self._uniform_bin_1d(y, self.n_bins)
 
@@ -223,9 +227,7 @@ class EntropyCore:
         return max(0.0, mi)  # Numerical stability (should never be negative)
 
     def rolling_mi(self, x: pd.Series, y: pd.Series, window: int, stride: int = 1) -> pd.Series:
-        """
-        Vectorized rolling mutual information.
-        """
+        """Rolling mutual information."""
         x_arr = x.values
         y_arr = y.values
         dates = x.index
@@ -242,9 +244,7 @@ class EntropyCore:
         return pd.Series(mi_vals, index=mi_idx, name=f"MI_{x.name}_vs_{y.name}")
 
     def transfer_entropy(self, source: np.ndarray, target: np.ndarray, lag: int = 1) -> float:
-        """
-        Transfer Entropy: TE(source → target) measuring directional information flow.
-        """
+        """Transfer Entropy: TE(source → target) measuring directional information flow."""
         # Align time series with lag
         y_t = target[lag:]
         y_tm1 = target[:-lag]
@@ -306,7 +306,9 @@ class RelationshipAnalyzer:
         analyzer.run_full_analysis(window=252, stride=5)
     """
 
-    def __init__(self, df: pd.DataFrame, columns: list[str], n_bins: int = 5, entropy_core: EntropyCore | None = None):
+    def __init__(
+        self, df: pd.DataFrame, columns: list[str], n_bins: int = 5, entropy_core: EntropyCore | None = None
+    ) -> None:
         """
         Args:
             df: DataFrame with datetime index and numeric columns
@@ -337,14 +339,18 @@ class RelationshipAnalyzer:
             else:
                 raise ValueError(f"Unknown method: {method}")
 
-            mi_results.append({"Pair": f"{col_a} vs {col_b}", "MI": mi, "Correlation": np.corrcoef(x, y)[0, 1]})
+            mi_results.append(
+                {
+                    "Pair": f"{col_a} vs {col_b}",
+                    "MI": mi,
+                    "Correlation": np.corrcoef(x, y)[0, 1],
+                }
+            )
 
         return pd.DataFrame(mi_results).sort_values("MI", ascending=False)
 
     def compute_rolling_analysis(self, window: int = 252, stride: int = 5) -> dict[str, pd.DataFrame]:
-        """
-        Computes rolling MI and correlation for all pairs.
-        """
+        """Computes rolling MI and correlation for all pairs."""
         mi_data = {}
         corr_data = {}
 
@@ -362,9 +368,7 @@ class RelationshipAnalyzer:
         return {"mi": pd.DataFrame(mi_data), "corr": pd.DataFrame(corr_data)}
 
     def compute_transfer_entropy_matrix(self, window: int = 126, lag: int = 1) -> pd.DataFrame:
-        """
-        Computes rolling transfer entropy for all pairs (bidirectional).
-        """
+        """Computes rolling transfer entropy for all pairs (bidirectional)."""
         results = []
 
         for col_a, col_b in self.pairs:
@@ -381,22 +385,26 @@ class RelationshipAnalyzer:
                 te_bwd_vals.append(self.core.transfer_entropy(tgt[s], src[s], lag))
 
             results.append(
-                {"Source": col_a, "Target": col_b, "TE_mean": np.mean(te_fwd_vals), "TE_std": np.std(te_fwd_vals)}
+                {
+                    "Source": col_a,
+                    "Target": col_b,
+                    "TE_mean": np.mean(te_fwd_vals),
+                    "TE_std": np.std(te_fwd_vals),
+                }
             )
             results.append(
-                {"Source": col_b, "Target": col_a, "TE_mean": np.mean(te_bwd_vals), "TE_std": np.std(te_bwd_vals)}
+                {
+                    "Source": col_b,
+                    "Target": col_a,
+                    "TE_mean": np.mean(te_bwd_vals),
+                    "TE_std": np.std(te_bwd_vals),
+                }
             )
 
         return pd.DataFrame(results).sort_values("TE_mean", ascending=False)
 
     def plot_static_correlation_heatmap(self) -> plt.Figure:
-        """
-        Global correlation heatmap for full period.
-
-        Returns:
-            matplotlib Figure object
-
-        """
+        """Global correlation heatmap for full period."""
         fig, ax = plt.subplots(figsize=(10, 8))
 
         corr_matrix = self.df.corr()
@@ -415,20 +423,10 @@ class RelationshipAnalyzer:
 
         ax.set_title("Static Correlation Matrix (Full Period)", fontsize=14, fontweight="bold")
         plt.tight_layout()
-        return self.apply_style(fig)
+        return apply_style(fig)
 
     def plot_rolling_comparison(self, rolling_data: dict[str, pd.DataFrame], window: int) -> plt.Figure:
-        """
-        2-column plot: Rolling correlation vs Rolling MI for each pair.
-
-        Args:
-            rolling_data: Output from compute_rolling_analysis()
-            window: Window size (for title)
-
-        Returns:
-            matplotlib Figure object
-
-        """
+        """2-column plot: Rolling correlation vs Rolling MI for each pair."""
         mi_df = rolling_data["mi"]
         corr_df = rolling_data["corr"]
 
@@ -456,19 +454,23 @@ class RelationshipAnalyzer:
             # Right panel: Rolling MI
             mi_series = mi_df[pair_name].dropna()
             axes[i, 1].plot(mi_series, alpha=0.7, label="MI", color="darkorange", linewidth=1.5)
-            axes[i, 1].plot(mi_series.rolling(20).mean(), linestyle="--", label="MA(20)", color="darkred", linewidth=2)
+            axes[i, 1].plot(
+                mi_series.rolling(20).mean(),
+                linestyle="--",
+                label="MA(20)",
+                color="darkred",
+                linewidth=2,
+            )
             axes[i, 1].set_title(f"Rolling MI ({self.core.n_bins} bins): {col_a} vs {col_b}")
             axes[i, 1].set_ylabel("MI (bits)")
             axes[i, 1].legend()
             axes[i, 1].grid(alpha=0.3)
 
         plt.tight_layout()
-        return self.apply_style(fig)
+        return apply_style(fig)
 
     def plot_correlation_regime_heatmap(self, window: int = 252, top_n: int = 10) -> plt.Figure:
-        """
-        Dual-panel: (1) Top N most variable rolling correlations, (2) Heatmap over time.
-        """
+        """Dual-panel: (1) Top N most variable rolling correlations, (2) Heatmap over time."""
         # Compute all rolling correlations
         rolling_corrs = {}
         for col_a, col_b in self.pairs:
@@ -496,7 +498,9 @@ class RelationshipAnalyzer:
         ax1.axhline(-0.5, color="gray", linestyle=":", alpha=0.3)
 
         ax1.set_title(
-            f"Top {top_n} Most Variable Rolling Correlations (Window={window} days)", fontsize=14, fontweight="bold"
+            f"Top {top_n} Most Variable Rolling Correlations (Window={window} days)",
+            fontsize=14,
+            fontweight="bold",
         )
         ax1.set_ylabel("Correlation Coefficient", fontsize=12)
         ax1.set_ylim(-1.05, 1.05)
@@ -510,7 +514,12 @@ class RelationshipAnalyzer:
         corr_df_sampled = corr_df.iloc[::20, :]
 
         im = ax2.imshow(
-            corr_df_sampled.T.values, aspect="auto", cmap="RdBu_r", vmin=-1, vmax=1, interpolation="nearest"
+            corr_df_sampled.T.values,
+            aspect="auto",
+            cmap="RdBu_r",
+            vmin=-1,
+            vmax=1,
+            interpolation="nearest",
         )
 
         # X-axis: dates
@@ -535,20 +544,10 @@ class RelationshipAnalyzer:
         cbar.set_label("Correlation", rotation=270, labelpad=20)
 
         plt.tight_layout()
-        return self.apply_style(fig)
+        return apply_style(fig)
 
     def plot_transfer_entropy(self, window: int = 126, lag: int = 1) -> plt.Figure:
-        """
-        Plots bidirectional transfer entropy for first pair (can extend to all).
-
-        Args:
-            window: Rolling TE window
-            lag: Prediction lag
-
-        Returns:
-            matplotlib Figure with 2 subplots (directional TE, net flow)
-
-        """
+        """Plots bidirectional transfer entropy for first pair (can extend to all)."""
         # Use first pair as example (extend to all pairs if needed)
         col_a, col_b = self.pairs[0]
         src = self.df[col_a].values
@@ -591,7 +590,7 @@ class RelationshipAnalyzer:
         ax2.grid(alpha=0.3)
 
         plt.tight_layout()
-        return self.apply_style(fig)
+        return apply_style(fig)
 
     def run_full_analysis(self, window: int = 252, stride: int = 5, show_plots: bool = True) -> dict[str, any]:
         """
