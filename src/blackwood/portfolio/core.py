@@ -22,6 +22,7 @@ class PortfolioBacktester:
         strategy: OptimizationStrategy,
         target_vol: float = 0.10,
         apply_leverage: bool = False,
+        apply_scaling: bool = False,
         use_optimal_f_for_ensemble: bool = True,
         central_allocator: CentralRiskAllocator | None = None,
         allocator_freq: str = "W-FRI",
@@ -29,6 +30,7 @@ class PortfolioBacktester:
         self.strategy = strategy
         self.target_vol = target_vol
         self.apply_leverage = apply_leverage
+        self.apply_scaling = apply_scaling
         self.use_optimal_f_for_ensemble = use_optimal_f_for_ensemble
         self.central_allocator = central_allocator
         self.allocator_freq = allocator_freq
@@ -280,6 +282,9 @@ class PortfolioBacktester:
             min_obs_for_full_trust=min_obs_for_full_trust,
             annualization_factor=per_strategy_ann_factors,
         )
+
+        if not self.apply_scaling:
+            scale_factors = pd.Series(1.0, index=scale_factors.index)
 
         active_mask = annual_vols >= min_vol_threshold
 
