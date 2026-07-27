@@ -196,10 +196,7 @@ class TangencyStrategy(OptimizationStrategy):
         self._mu_excess = mu_excess
         self._problem = problem
 
-    def _ensure_problem(
-        self,
-        n_assets: int,
-    ) -> tuple[cp.Variable, cp.Parameter, cp.Parameter, cp.Problem]:
+    def _ensure_problem(self, n_assets: int) -> tuple[cp.Variable, cp.Parameter, cp.Parameter, cp.Problem]:
         """Return cached optimization objects, rebuilding if shape changed."""
         if self._problem is None or self._n_assets != n_assets:
             self._build_problem(n_assets)
@@ -221,12 +218,7 @@ class TangencyStrategy(OptimizationStrategy):
         log1p_r = np.log1p(returns.fillna(0.0).to_numpy(dtype=float))
         return np.expm1(log1p_r.mean(axis=0) * self.annualization)
 
-    def _normalize_weights(
-        self,
-        raw_weights: np.ndarray,
-        cov: np.ndarray,
-        idx: pd.Index,
-    ) -> pd.Series:
+    def _normalize_weights(self, raw_weights: np.ndarray, cov: np.ndarray, idx: pd.Index) -> pd.Series:
         """Clip and normalize solved weights; fallback if invalid."""
         clipped = np.clip(raw_weights, 0.0, self.max_weight)
         total = clipped.sum()
@@ -234,11 +226,7 @@ class TangencyStrategy(OptimizationStrategy):
             return self._inv_vol_fallback(cov, idx, self.eps)
         return pd.Series(clipped / total, index=idx)
 
-    def _solve_cached_problem(
-        self,
-        cov: np.ndarray,
-        mu_excess: np.ndarray,
-    ) -> tuple[np.ndarray | None, str | None]:
+    def _solve_cached_problem(self, cov: np.ndarray, mu_excess: np.ndarray) -> tuple[np.ndarray | None, str | None]:
         """Solve the cached CVXPY problem and return weights and status."""
         w, risk_factor, mu_excess_param, problem = self._ensure_problem(len(mu_excess))
 

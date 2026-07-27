@@ -74,6 +74,7 @@ class PerformanceFormatter:
             "Profit Factor PnL": "Profit Factor PnL",
             "Alpha [%]": "Alpha [%]",
             "Beta": "Beta",
+            "Information Ratio": "Information Ratio",
             "Sharpe Ratio": "Sharpe Ratio",
             "Probabilistic Sharpe Ratio 1.0": "Prob. Sharpe Ratio 1.0",
             "Min. Track Record Length": "Min. Track Record Length",
@@ -147,6 +148,7 @@ class PerformanceFormatter:
                     "Alpha [%]",
                     "Beta",
                     "Arithmetic Sharpe Ratio",
+                    "Information Ratio",
                     "Sharpe Ratio",
                     "Probabilistic Sharpe Ratio 1.0",
                     "Min. Track Record Length",
@@ -220,9 +222,17 @@ class PerformanceAnalyzer:
         indicator_col: str | None = None,
     ) -> pd.DataFrame:
         trades = grouped_data.size().rename("Trades")
-        winrate = grouped_data["ReturnPct"].apply(lambda x: (x > 0).mean() * 100.0).rename("WinRate")
+        winrate = (
+            grouped_data["ReturnPct"]
+            .apply(lambda x: (x > 0).mean() * 100.0)
+            .rename("WinRate")
+        )
         winrate = winrate.rename("WinRate")
-        profit_factor = grouped_data["PnL"].apply(PerformanceAnalyzer.calc_profit_factor).rename("ProfitFactor")
+        profit_factor = (
+            grouped_data["PnL"]
+            .apply(PerformanceAnalyzer.calc_profit_factor)
+            .rename("ProfitFactor")
+        )
         rr = grouped_data["RiskRewardRatio"]
         avg_rr = rr.mean().rename("AvgRR")
         med_rr = rr.median().rename("MedianRR")
@@ -256,7 +266,11 @@ class PerformanceAnalyzer:
 
         zone_stats: dict[str, ZoneMetrics] = {}
         for group_id, row in table.iterrows():
-            group_display = group_id.strftime("%H:%M") if isinstance(group_id, time) else str(group_id)
+            group_display = (
+                group_id.strftime("%H:%M")
+                if isinstance(group_id, time)
+                else str(group_id)
+            )
 
             pf = row["ProfitFactor"]
             if np.isnan(pf):
@@ -297,13 +311,22 @@ class PerformanceAnalyzer:
             return None
         return self._print_zone_table(trades_df, trade_type_name)
 
-    def run_analysis(self, trade_direction: str = "both") -> dict[str, dict[str, dict[str, ZoneMetrics]]]:
+    def run_analysis(
+        self, trade_direction: str = "both"
+    ) -> dict[str, dict[str, dict[str, ZoneMetrics]]]:
         valid_directions = {"all", "long", "short", "both"}
         if trade_direction not in valid_directions:
-            raise ValueError(f"trade_direction must be one of {valid_directions}, got '{trade_direction}'")
+            raise ValueError(
+                f"trade_direction must be one of {valid_directions}, got '{trade_direction}'"
+            )
 
-        if trade_direction in {"long", "short", "both"} and "Size" not in self.df.columns:
-            raise ValueError(f"trade_direction='{trade_direction}' requires 'Size' column in DataFrame")
+        if (
+            trade_direction in {"long", "short", "both"}
+            and "Size" not in self.df.columns
+        ):
+            raise ValueError(
+                f"trade_direction='{trade_direction}' requires 'Size' column in DataFrame"
+            )
 
         if trade_direction == "all":
             all_stats = self._analyze_trade_type(self.df, "All") or {}
@@ -354,7 +377,9 @@ class BinnedIndicatorAnalyzer:
         self.df = self._validate_data()
         if self.bin_strategy == BinStrategy.PERCENTILE:
             if self.bins is not None or self.labels is not None:
-                raise ValueError("bins and labels must be None when using PERCENTILE strategy")
+                raise ValueError(
+                    "bins and labels must be None when using PERCENTILE strategy"
+                )
             self.bins, self.labels = self._calculate_percentile_bins()
         else:
             if self.bins is None or self.labels is None:
@@ -365,7 +390,13 @@ class BinnedIndicatorAnalyzer:
                 )
 
     def _validate_data(self) -> pd.DataFrame:
-        required_cols = ["Size", "ReturnPct", "RiskRewardRatio", "PnL", self.indicator_column]
+        required_cols = [
+            "Size",
+            "ReturnPct",
+            "RiskRewardRatio",
+            "PnL",
+            self.indicator_column,
+        ]
         return _validate_and_clean_df(self.df, required_cols)
 
     def _round_to_clean_step(self, raw_width: float) -> float:
@@ -415,7 +446,9 @@ class BinnedIndicatorAnalyzer:
             right=False,
             ordered=True,
         )
-        out["Zone"] = out["Zone"].astype(pd.CategoricalDtype(categories=self.labels, ordered=True))
+        out["Zone"] = out["Zone"].astype(
+            pd.CategoricalDtype(categories=self.labels, ordered=True)
+        )
         return out
 
     def _print_zone_table(
@@ -425,14 +458,18 @@ class BinnedIndicatorAnalyzer:
     ) -> dict[str, ZoneMetrics]:
         dfz = self._assign_zone(trades_df)
         grp = dfz.groupby("Zone", observed=False)
-        table = PerformanceAnalyzer.compute_metrics(grp, indicator_col=self.indicator_column)
+        table = PerformanceAnalyzer.compute_metrics(
+            grp, indicator_col=self.indicator_column
+        )
 
         assert self.labels is not None
         table = table.reindex(self.labels).fillna(0.0)
 
         zone_width = min(max(len(max(self.labels, key=len)), 25), 45)
         title = f"{self.indicator_name} - {trade_type_name}"
-        print(f"\n{title:<25} | Trades | WinRate | ProfitF |   AvgRR | MedianRR |   StdRR | AvgInd")
+        print(
+            f"\n{title:<25} | Trades | WinRate | ProfitF |   AvgRR | MedianRR |   StdRR | AvgInd"
+        )
         print("-" * 95)
 
         zone_stats: dict[str, ZoneMetrics] = {}
@@ -539,7 +576,11 @@ class BinnedIndicatorAnalyzer:
                 x=zones,
                 y=trades,
                 name="Trade Count",
-                marker=dict(color=plot_style.accent1, line=dict(color=plot_style.line, width=1), opacity=0.8),
+                marker=dict(
+                    color=plot_style.accent1,
+                    line=dict(color=plot_style.line, width=1),
+                    opacity=0.8,
+                ),
                 hovertemplate="<b>%{x}</b><br>Trades: %{y}<extra></extra>",
             ),
             row=1,
@@ -551,30 +592,64 @@ class BinnedIndicatorAnalyzer:
                 x=zones,
                 y=win_rates,
                 name="Win Rate",
-                marker=dict(color=plot_style.accent3, line=dict(color=plot_style.line, width=1), opacity=0.8),
+                marker=dict(
+                    color=plot_style.accent3,
+                    line=dict(color=plot_style.line, width=1),
+                    opacity=0.8,
+                ),
                 hovertemplate="<b>%{x}</b><br>Win Rate: %{y:.1f}%<extra></extra>",
             ),
             row=1,
             col=2,
         )
-        fig.add_hline(y=50, line_dash="dot", line_color=plot_style.muted, opacity=0.7, row="1", col="2")
+        fig.add_hline(
+            y=50,
+            line_dash="dot",
+            line_color=plot_style.muted,
+            opacity=0.7,
+            row="1",
+            col="2",
+        )
 
         rrr_colors = [
-            plot_style.accent2 if rr < 0 else plot_style.accent4 if rr < 1.0 else plot_style.accent3 for rr in avg_rrs
+            plot_style.accent2
+            if rr < 0
+            else plot_style.accent4
+            if rr < 1.0
+            else plot_style.accent3
+            for rr in avg_rrs
         ]
         fig.add_trace(
             go.Bar(
                 x=zones,
                 y=avg_rrs,
                 name="Average RRR",
-                marker=dict(color=rrr_colors, line=dict(color=plot_style.line, width=1), opacity=0.8),
+                marker=dict(
+                    color=rrr_colors,
+                    line=dict(color=plot_style.line, width=1),
+                    opacity=0.8,
+                ),
                 hovertemplate="<b>%{x}</b><br>Avg RRR: %{y:.3f}<extra></extra>",
             ),
             row=1,
             col=3,
         )
-        fig.add_hline(y=0.0, line_dash="dash", line_color=plot_style.accent2, opacity=0.6, row="1", col="3")
-        fig.add_hline(y=1.0, line_dash="dot", line_color=plot_style.muted, opacity=0.7, row="1", col="3")
+        fig.add_hline(
+            y=0.0,
+            line_dash="dash",
+            line_color=plot_style.accent2,
+            opacity=0.6,
+            row="1",
+            col="3",
+        )
+        fig.add_hline(
+            y=1.0,
+            line_dash="dot",
+            line_color=plot_style.muted,
+            opacity=0.7,
+            row="1",
+            col="3",
+        )
 
         fig.update_layout(
             height=500,
