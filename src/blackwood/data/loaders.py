@@ -73,14 +73,15 @@ def load_security(
     rule = resample_rule if resample_rule else "D"
 
     if is_stocks:
-        if base_path.rstrip("/").endswith("H1"):
-            file_granularity = "H1"
-        elif base_path.rstrip("/").endswith("M15"):
-            file_granularity = "M15"
-        elif base_path.rstrip("/").endswith("M5"):
-            file_granularity = "M5"
-        else:
-            file_granularity = "M15"
+        if file_granularity is None:
+            if base_path.rstrip("/").endswith("H1"):
+                file_granularity = "H1"
+            elif base_path.rstrip("/").endswith("M15"):
+                file_granularity = "M15"
+            elif base_path.rstrip("/").endswith("M5"):
+                file_granularity = "M5"
+            else:
+                file_granularity = "M15"
         default_tz = "US/Eastern"
         spread = 0.0006  # Spread: 0.02% | Commission: 0.01% | Swap-equivalent: 0.03% | Total ≈ 0.06%
         commission = (0, 0)
@@ -166,32 +167,30 @@ def run_batch_backtest(
     is_stocks: bool = False,
     force_timezone: str | None = None,
     verbose: bool = True,
+    file_granularity: str | None = None,
 ) -> tuple[pd.DataFrame, dict[str, pd.Series]]:
     if symbols is None:
         if is_stocks:
-            if base_path.rstrip("/").endswith("H1"):
-                file_granularity = "H1"
-            elif base_path.rstrip("/").endswith("M15"):
-                file_granularity = "M15"
-            elif base_path.rstrip("/").endswith("M5"):
-                file_granularity = "M5"
-            else:
-                file_granularity = "M15"
+            granularity = file_granularity
+            if granularity is None:
+                if base_path.rstrip("/").endswith("H1"):
+                    granularity = "H1"
+                elif base_path.rstrip("/").endswith("M15"):
+                    granularity = "M15"
+                elif base_path.rstrip("/").endswith("M5"):
+                    granularity = "M5"
+                else:
+                    granularity = "M15"
             symbols = [
-                fname.split(f"_{file_granularity}.csv")[0]
+                fname.split(f"_{granularity}.csv")[0]
                 for fname in os.listdir(base_path)
-                if fname.endswith(f"_{file_granularity}.csv")
+                if fname.endswith(f"_{granularity}.csv")
             ]
         else:
             symbols = list(BROKER_SPREADS.keys())
 
     results_list = []
     equity_curves: dict[str, pd.Series] = {}
-    if verbose:
-        print(f"\n{'=' * 33}")
-        print(f"Running Batch: {timeframe} | {len(symbols)} Instruments")
-        print(f"Dataset: {data.upper()}")
-        print(f"{'=' * 33}")
 
     for symbol in symbols:
         try:
@@ -202,6 +201,7 @@ def run_batch_backtest(
                 indicator_fn=indicator_fn,
                 is_stocks=is_stocks,
                 timezone=force_timezone,
+                file_granularity=file_granularity,
             )
 
             if data == "train":
@@ -358,6 +358,7 @@ def run_full_suite(
     force_timezone: str | None = None,
     create_portfolios: bool = False,
     verbose: bool = False,
+    file_granularity: str | None = None,
 ) -> tuple[pd.DataFrame, dict[str, dict[str, pd.Series]]]:
     if timeframes is None:
         timeframes = ["5min", "15min", "30min", "1h", "2h", "4h", "D", "W"]
@@ -407,6 +408,7 @@ def run_full_suite(
             is_stocks=is_stocks,
             force_timezone=force_timezone,
             verbose=verbose,
+            file_granularity=file_granularity,
         )
         all_equity_curves[tf] = equity_curves
 
@@ -439,6 +441,7 @@ def run_full_suite(
                         indicator_fn=indicator_fn,
                         is_stocks=is_stocks,
                         timezone=force_timezone,
+                        file_granularity=file_granularity,
                     )
 
                     # Use same data split as strategy
@@ -486,6 +489,7 @@ def run_full_suite_berlin_tz(
     exclude_assets: str | tuple[str, ...] = (),
     create_portfolios: bool = False,
     verbose: bool = True,
+    file_granularity: str | None = None,
 ) -> tuple[pd.DataFrame, dict[str, dict[str, pd.Series]]]:
     if timeframes is None:
         timeframes = ["5min", "15min", "30min", "1h", "2h", "4h", "D", "W"]
@@ -504,4 +508,5 @@ def run_full_suite_berlin_tz(
         force_timezone="Europe/Berlin",
         create_portfolios=create_portfolios,
         verbose=verbose,
+        file_granularity=file_granularity,
     )
