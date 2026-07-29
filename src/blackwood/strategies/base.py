@@ -10,10 +10,8 @@ class BaseTemplateStrategy(Strategy):
     drawdown_scale_threshold = 0.05  # Scale down at 5% drawdown
     drawdown_scale_factor = 0.5  # Reduce size by 50%
 
-    def __init__(self) -> None:
+    def init(self) -> None:
         """Initialize strategy - override this method in subclass"""
-        super().init()
-
         self._peak_equity = float(self.equity)  # Explicit copy, not reference
         self._partial_trades: set[int] = set()
 
@@ -55,16 +53,18 @@ class MetaLabeling(BaseTemplateStrategy):
 
     use_kelly_sizing = False
 
-    def __init__(self) -> None:
+    def init(self) -> None:
         """Initialize strategy - override this method in subclass"""
         super().init()
 
-        self._peak_equity = float(self.equity)
-
         if self.gate_col is not None:
-            self._gate = self.I(lambda: self.data.df[self.gate_col].values.astype(float), plot=False)
+            self._gate = self.I(
+                lambda: self.data.df[self.gate_col].values.astype(float), plot=False
+            )
         if self.bet_col is not None:
-            self._bet = self.I(lambda: self.data.df[self.bet_col].values.astype(float), plot=False)
+            self._bet = self.I(
+                lambda: self.data.df[self.bet_col].values.astype(float), plot=False
+            )
 
     def _gate_allows_long(self) -> bool:
         if self.gate_col is None:
