@@ -3,6 +3,7 @@ from collections.abc import Callable, Sequence
 from functools import lru_cache
 from typing import Literal, cast
 
+import numpy as np
 import pandas as pd
 from backtesting import Backtest, Strategy
 
@@ -185,7 +186,7 @@ def run_batch_backtest(
             symbols = list(BROKER_SPREADS.keys())
 
     results_list = []
-    equity_curves = {}
+    equity_curves: dict[str, pd.Series] = {}
     if verbose:
         print(f"\n{'=' * 33}")
         print(f"Running Batch: {timeframe} | {len(symbols)} Instruments")
@@ -260,6 +261,59 @@ def run_batch_backtest(
 
     results_df = pd.DataFrame(results_list)
     results_df.sort_values("Sharpe", ascending=False, inplace=True)
+
+    # --- Equal-weight portfolio, appended at the end ---
+    if len(equity_curves) >= 2:
+        portfolio_equity = _create_equal_weight_portfolio(equity_curves)
+        equity_curves["Portfolio_EqualWeight"] = portfolio_equity
+
+        if not portfolio_equity.empty and len(portfolio_equity) > 1:
+            from blackwood.metrics.core import (
+                calculate_calmar_ratio,
+                calculate_max_drawdown,
+                calculate_sharpe_ratio,
+                calculate_trade_metrics,
+            )
+
+            total_return_pct = (portfolio_equity.iloc[-1] / portfolio_equity.iloc[0] - 1) * 100
+            max_dd_pct = -calculate_max_drawdown(portfolio_equity) * 100
+            sharpe = calculate_sharpe_ratio(portfolio_equity)
+            calmar = calculate_calmar_ratio(portfolio_equity)
+
+            # No trade list exists for a blended portfolio equity curve, so treat each
+            day_returns = portfolio_equity.resample("D").last().dropna().pct_change().dropna()
+            trade_metrics = calculate_trade_metrics(
+                pnl=day_returns.to_numpy(),
+                returns_pct=(day_returns * 100).to_numpy(),
+            )
+
+            portfolio_row = pd.DataFrame(
+                [
+                    {
+                        "Symbol": "Portfolio_EqualWeight",
+                        "# Trades": None,
+                        "PF": (
+                            round(trade_metrics["profit_factor"], 2)
+                            if not np.isnan(trade_metrics["profit_factor"])
+                            else None
+                        ),
+                        "Sharpe": round(sharpe, 2) if not np.isnan(sharpe) else None,
+                        "Calmar": round(calmar, 2) if not np.isnan(calmar) else None,
+                        "Max DD%": round(max_dd_pct, 2),
+                        "Win Rate%": (
+                            round(trade_metrics["win_rate"], 2) if not np.isnan(trade_metrics["win_rate"]) else None
+                        ),
+                        "Exp %": (
+                            round(trade_metrics["avg_trade_pct"], 3)
+                            if not np.isnan(trade_metrics["avg_trade_pct"])
+                            else None
+                        ),
+                        "Return %": round(total_return_pct, 2),
+                    }
+                ]
+            )
+            # append after sorting so it always lands at the bottom, not mixed into the ranking
+            results_df = pd.concat([results_df, portfolio_row], ignore_index=True)
     if verbose:
         pd.set_option("display.max_rows", None)
         pd.set_option("display.expand_frame_repr", False)
@@ -356,7 +410,7 @@ def run_full_suite(
         )
         all_equity_curves[tf] = equity_curves
 
-    # Create portfolios and benchmarks if requested
+    # Create portfolios
     if create_portfolios:
         from blackwood.strategies.base import BuyAndHoldStrategy
 
@@ -364,16 +418,17 @@ def run_full_suite(
             equity_curves = all_equity_curves[tf]
 
             if len(equity_curves) < 2:
-                continue  # Need at least 2 strategies for portfolio
+                continue
 
             # Save original symbol list before adding portfolio
-            original_symbols = list(equity_curves.keys())
+            original_symbols = [s for s in equity_curves if s not in ("Portfolio_EqualWeight", "Benchmark_BuyHold")]
 
             # 1. Create equal-weight portfolio from strategies
-            portfolio_equity = _create_equal_weight_portfolio(equity_curves)
+            base_curves = {s: equity_curves[s] for s in original_symbols}
+            portfolio_equity = _create_equal_weight_portfolio(base_curves)
             all_equity_curves[tf]["Portfolio_EqualWeight"] = portfolio_equity
 
-            # # 2. Run Buy & Hold backtests for all symbols
+            # 2. Run Buy & Hold backtests for all symbols
             bh_equity_curves = {}
             for symbol in original_symbols:
                 try:
