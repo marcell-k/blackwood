@@ -57,11 +57,7 @@ def _solver_settings(solver: str) -> dict[str, Any]:
 
 
 def _solve_with_fallback(
-    problem: cp.Problem,
-    solvers: list[str],
-    *,
-    warm_start: bool = False,
-    ignore_dpp: bool = False,
+    problem: cp.Problem, solvers: list[str], *, warm_start: bool = False, ignore_dpp: bool = False
 ) -> str | None:
     """
     Solve with a solver cascade.
@@ -105,7 +101,7 @@ class OptimizationStrategy(ABC):
         use_denoising: bool = True,
         denoising_method: str = "marcenko_pastur",
         risk_model: RiskModel | None = None,
-    ):
+    ) -> None:
         self.max_weight = max_weight
         self.use_denoising = use_denoising
         self.denoising_method = denoising_method
@@ -148,7 +144,7 @@ class TangencyStrategy(OptimizationStrategy):
         eps: float = 1e-8,
         annualization: int = 252,
         warm_start: bool = True,
-    ):
+    ) -> None:
         super().__init__(
             max_weight=max_weight,
             use_denoising=use_denoising,
@@ -186,7 +182,14 @@ class TangencyStrategy(OptimizationStrategy):
             [
                 mu_excess @ w == 1.0,
                 w >= 0.0,
-                w <= self.max_weight,
+                # `w` is the unnormalized Markowitz-trick variable (scale fixed
+                # by mu_excess @ w == 1), not a portfolio weight. The per-asset
+                # cap must apply relative to sum(w), matching
+                # NCOStrategy._optimize_max_sharpe — otherwise this constraint
+                # is infeasible whenever max_weight * sum(positive mu_excess)
+                # < 1, which is nearly always true at realistic Sharpe ratios,
+                # regardless of return normalization.
+                w <= self.max_weight * cp.sum(w),
             ],
         )
 
@@ -223,6 +226,10 @@ class TangencyStrategy(OptimizationStrategy):
         clipped = np.clip(raw_weights, 0.0, self.max_weight)
         total = clipped.sum()
         if (not np.isfinite(total)) or total <= self.eps:
+            print(
+                f"[TangencyStrategy] solved weights degenerate after clipping "
+                f"(sum={total:.3e}) — falling back to inverse-volatility weights."
+            )
             return self._inv_vol_fallback(cov, idx, self.eps)
         return pd.Series(clipped / total, index=idx)
 
@@ -240,6 +247,10 @@ class TangencyStrategy(OptimizationStrategy):
         )
 
         if w.value is None:
+            print(
+                f"[TangencyStrategy] solver returned no primal value "
+                f"(status={status}) — falling back to inverse-volatility weights."
+            )
             return None, status
         return np.asarray(w.value, dtype=float), status
 
@@ -252,10 +263,21 @@ class TangencyStrategy(OptimizationStrategy):
 
         mu_excess = mu - self.risk_free_rate
         if np.all(mu_excess <= 0.0):
+            print(
+                f"[TangencyStrategy] all {len(mu_excess)} assets have "
+                f"non-positive excess return (max={mu_excess.max():.4f}) — "
+                f"falling back to inverse-volatility weights."
+            )
             return self._inv_vol_fallback(cov, idx, self.eps)
 
         solved_weights, status = self._solve_cached_problem(cov, mu_excess)
         if solved_weights is None or status != cp.OPTIMAL:
+            print(
+                f"[TangencyStrategy] solve did not reach optimality "
+                f"(status={status}, mu_excess range="
+                f"[{mu_excess.min():.4f}, {mu_excess.max():.4f}]) — "
+                f"falling back to inverse-volatility weights."
+            )
             return self._inv_vol_fallback(cov, idx, self.eps)
 
         return self._normalize_weights(solved_weights, cov, idx)
@@ -264,7 +286,7 @@ class TangencyStrategy(OptimizationStrategy):
 class EqualStrategy(OptimizationStrategy):
     """Equal weighted Optimization with risk aversion parameter."""
 
-    def __init__(self, risk_model: RiskModel | None = None):
+    def __init__(self, risk_model: RiskModel | None = None) -> None:
         super().__init__(risk_model=risk_model)
 
     def compute_weights(self, returns: pd.DataFrame, **kwargs) -> pd.Series:
@@ -282,7 +304,7 @@ class MVOStrategy(OptimizationStrategy):
         solver: str = "OSQP",
         risk_model: RiskModel | None = None,
         eps: float = 1e-10,
-    ):
+    ) -> None:
         super().__init__(max_weight=max_weight, use_denoising=use_denoising, risk_model=risk_model)
         self.risk_aversion = float(risk_aversion)
         self.solver = solver
@@ -397,7 +419,7 @@ class MinimumVarianceStrategy(OptimizationStrategy):
         risk_model: RiskModel | None = None,
         ridge: float = 1e-10,
         warm_start: bool = True,
-    ):
+    ) -> None:
         super().__init__(max_weight=max_weight, use_denoising=use_denoising, risk_model=risk_model)
         self.solver = solver
         self.ridge = float(ridge)
@@ -768,7 +790,7 @@ class RiskParityStrategy(OptimizationStrategy):
         risk_model: RiskModel | None = None,
         eps: float = 1e-12,
         warm_start: bool = True,
-    ):
+    ) -> None:
         super().__init__(
             max_weight=max_weight,
             use_denoising=use_denoising,
@@ -875,10 +897,10 @@ class RiskParityStrategy(OptimizationStrategy):
         bounds = [(0.0, float(self.max_weight))] * n_assets
         constraints = ({"type": "eq", "fun": lambda w: np.sum(w) - 1.0},)
 
-        def objective(w):
+        def objective(w: np.ndarray) -> float:
             return self._objective_and_gradient(w, cov, budgets)[0]
 
-        def gradient(w):
+        def gradient(w: np.ndarray) -> np.ndarray:
             return self._objective_and_gradient(w, cov, budgets)[1]
 
         result = minimize(
@@ -923,7 +945,7 @@ class TailRiskParityStrategy(OptimizationStrategy):
         max_weight: float = 0.9,
         use_denoising: bool = True,
         risk_model: RiskModel | None = None,
-    ):
+    ) -> None:
         super().__init__(
             max_weight=max_weight,
             use_denoising=use_denoising,
@@ -951,7 +973,7 @@ class TailRiskParityStrategy(OptimizationStrategy):
         inv_vol = np.where(volatilities > 1e-8, 1 / volatilities, 0)
         w_init = inv_vol / np.sum(inv_vol) if np.sum(inv_vol) > 0 else np.ones(n_assets) / n_assets
 
-        def objective(w):
+        def objective(w: np.ndarray) -> float:
             risk_fracs = self._compute_risk_fractions(w, ret_values)
             if risk_fracs is None:
                 return 1e6
@@ -1048,7 +1070,7 @@ class HRPStrategy(OptimizationStrategy):
         use_denoising: bool = True,
         risk_model: RiskModel | None = None,
         eps: float = 1e-12,
-    ):
+    ) -> None:
         super().__init__(max_weight=max_weight, use_denoising=use_denoising, risk_model=risk_model)
         self.linkage_method = linkage_method
         self.eps = float(eps)
@@ -1144,12 +1166,7 @@ class HRPStrategy(OptimizationStrategy):
         return weights
 
     @staticmethod
-    def _cluster_variance_interval(
-        cov_sorted: np.ndarray,
-        inv_diag: np.ndarray,
-        start: int,
-        end: int,
-    ) -> float:
+    def _cluster_variance_interval(cov_sorted: np.ndarray, inv_diag: np.ndarray, start: int, end: int) -> float:
         """
         Cluster variance for a contiguous interval [start, end) in sorted space,
         using inverse-variance portfolio weights computed from the diagonal only.
@@ -1446,7 +1463,7 @@ class EnsembleStrategy(OptimizationStrategy):
         return pd.Series(weights, index=strategy_names)
 
     def _blend_weights(self, sub_weights: dict[str, pd.Series], strategy_weights: pd.Series) -> pd.Series:
-        r"""Hierarchical blending with index-safe alignment across strategy universes."""
+        """Hierarchical blending with index-safe alignment across strategy universes."""
         strategy_names = list(sub_weights.keys())
         first_weights = sub_weights[strategy_names[0]]
         all_aligned = all(sub_weights[name].index.equals(first_weights.index) for name in strategy_names[1:])
@@ -1468,13 +1485,7 @@ class EnsembleStrategy(OptimizationStrategy):
         return pd.Series(final_values, index=weights_table.index)
 
     def diagnose(self, returns: pd.DataFrame) -> dict:
-        """
-        Diagnostic info for ensemble analysis.
-
-        Returns:
-            Dict with strategy_weights, strategy_corr, strategy_vol, concentration_hhi
-
-        """
+        """Diagnostic info for ensemble analysis."""
         sub_weights = {name: strat.compute_weights(returns) for name, strat in self.strategies.items()}
 
         if self.ensemble_optimizer == "minvar":
@@ -1513,7 +1524,7 @@ class EnsemblePositionSizer:
     min_window_len: int = 60
 
     # Parameters passed through to OptimalFCalculator.calculate_optimal_f
-    sigma_bounds: list[float] | None | str = "use_instance"
+    sigma_bounds: list[float] | str | None = "use_instance"
     sigma_bounds_margin: tuple[float, float] | None = None
     f_min: float = 0.0
     f_max: float = 5.0
@@ -1522,11 +1533,7 @@ class EnsemblePositionSizer:
     seed: int = 89
     max_memory_mb: int = 500
 
-    def compute_targets(
-        self,
-        returns: pd.DataFrame,
-        as_of: pd.Timestamp | None = None,
-    ) -> dict[str, Any]:
+    def compute_targets(self, returns: pd.DataFrame, as_of: pd.Timestamp | None = None) -> dict[str, Any]:
         r"""
         Compute asset weights and portfolio-level 'risk % of equity' at a rebalance date.
 
@@ -1547,9 +1554,9 @@ class EnsemblePositionSizer:
                 "weights": pd.Series,
                     Final *relative* asset weights (sum to 1)
                 "risk_fraction": float,
-                    Fraction of equity suggested to risk per period (0–∞).
+                    Fraction of equity suggested to risk per period (0-∞).
                 "risk_percent": float,
-                    Same as risk_fraction but expressed in percent (0–∞).
+                    Same as risk_fraction but expressed in percent (0-∞).
                 "optimal_f": float,
                     Raw optimal f from OptimalFCalculator.
                 "largest_loss": float,
@@ -1577,20 +1584,17 @@ class EnsemblePositionSizer:
             if as_of not in returns.index:
                 # Forward-fill style alignment: use the last available date <= as_of
                 # This keeps the logic robust if as_of is a non-trading day.
-                loc = returns.index.searchsorted(as_of, side="right") - 1
+                loc = int(returns.index.searchsorted(as_of, side="right") - 1)
                 if loc < 0:
                     raise ValueError("as_of is before the first return index")
                 as_of = returns.index[loc]
 
-        # Slice history up to as_of (inclusive)
         hist = returns.loc[:as_of]
 
         # 2) Extract lookback window (last lookback_window observations)
         window = hist.iloc[-self.lookback_window :]
 
         if len(window) < self.min_window_len:
-            # Not enough data to estimate both optimizer and Optimal f reliably
-            # Fallback: equal-weight & zero extra risk (risk_fraction = 0)
             assets = returns.columns
             fallback_weights = pd.Series(1.0 / len(assets), index=assets)
 
@@ -1604,8 +1608,7 @@ class EnsemblePositionSizer:
             }
 
         # 3) Cross-sectional allocation via EnsembleStrategy (no look-ahead)
-        #    We assume the same `window` is passed here as in your backtest
-        #    for a given rebalance date.
+        #    Assumption same 'window' passed here as in backtest
         asset_weights = self.ensemble.compute_weights(window)
 
         # Ensure weights align to columns of `returns` (fill missing with 0)
@@ -1614,7 +1617,7 @@ class EnsemblePositionSizer:
             asset_weights /= asset_weights.sum()
 
         # 4) Construct ensemble portfolio return series over the window
-        #    This is fully vectorized: T×N matrix times N-vector of weights.
+        #    This is fully vectorized: TxN matrix times N-vector of weights.
         #    Result: T-vector of ensemble returns.
         ensemble_returns = (window * asset_weights).sum(axis=1)
 
@@ -1668,7 +1671,7 @@ class OptimalFCalculator(OptimizationStrategy):
         exclude_zeros: bool = False,
         use_denoising: bool = True,
         risk_model: RiskModel | None = None,
-    ):
+    ) -> None:
         super().__init__(use_denoising=use_denoising, risk_model=risk_model)
 
         self.portfolio_returns = portfolio_returns.sort_index()
@@ -1678,64 +1681,41 @@ class OptimalFCalculator(OptimizationStrategy):
         self.t_params = self._fit_distribution()
         self.sigma_bounds = self._calculate_empirical_sigma_bounds()
 
+    def compute_weights(self, returns: pd.DataFrame, **kwargs) -> pd.Series:
+        """Not applicable: OptimalFCalculator sizes an existing portfolio return
+        stream rather than allocating weights across assets."""
+        del returns, kwargs
+        raise NotImplementedError(
+            "OptimalFCalculator does not implement compute_weights; "
+            "use calculate_optimal_f on the constructed portfolio_returns instead."
+        )
+
     def _fit_distribution(self) -> dict[str, float]:
-        """
-        Fit Student-t distribution to portfolio returns.
-
-        Returns
-        -------
-        dict
-            Dictionary with t_df, t_loc, t_scale, mean_emp, std_emp, min_return, max_return
-
-        """
+        """Fit Student-t distribution to portfolio returns."""
         from scipy.stats import t
 
         returns = self.portfolio_returns.copy()
-
         if self.exclude_zeros:
             returns = returns.loc[returns != 0]
-
         ret = returns.to_numpy()
-
         # Fit Student-t distribution
         df_t, loc_t, scale_t = t.fit(ret)
-
         # Calculate empirical statistics
         mean_emp = np.mean(ret)
         std_emp = np.std(ret, ddof=1)
-
         return {
-            "t_df": df_t,
-            "t_loc": loc_t,
-            "t_scale": scale_t,
-            "mean_emp": mean_emp,
-            "std_emp": std_emp,
-            "min_return": ret.min(),
-            "max_return": ret.max(),
+            "t_df": float(df_t),
+            "t_loc": float(loc_t),
+            "t_scale": float(scale_t),
+            "mean_emp": float(mean_emp),
+            "std_emp": float(std_emp),
+            "min_return": float(ret.min()),
+            "max_return": float(ret.max()),
         }
 
     @staticmethod
     def _calculate_std_away(value: float, df: float, loc: float, scale: float) -> float:
-        """
-        Calculate how many standard deviations a value is from the Student-t mean.
-
-        Parameters
-        ----------
-        value : float
-            The value to evaluate (e.g., empirical min or max return)
-        df : float
-            Degrees of freedom from Student-t fit
-        loc : float
-            Location parameter (mean) from Student-t fit
-        scale : float
-            Scale parameter from Student-t fit
-
-        Returns
-        -------
-        float
-            Number of standard deviations away. Negative means below mean.
-
-        """
+        """Calculate how many standard deviations a value is from the Student-t mean."""
         if df <= 2:
             raise ValueError(f"Student-t std is undefined for df <= 2. Got df={df}")
 
@@ -1764,18 +1744,8 @@ class OptimalFCalculator(OptimizationStrategy):
         scale = self.t_params["t_scale"]
         try:
             # Preferred: t-based sigma bounds when df > 2
-            z_min = self._calculate_std_away(
-                value=min_ret,
-                df=df,
-                loc=loc,
-                scale=scale,
-            )
-            z_max = self._calculate_std_away(
-                value=max_ret,
-                df=df,
-                loc=loc,
-                scale=scale,
-            )
+            z_min = self._calculate_std_away(value=min_ret, df=df, loc=loc, scale=scale)
+            z_max = self._calculate_std_away(value=max_ret, df=df, loc=loc, scale=scale)
         except ValueError:
             # Fallback: Normal-style z-scores using empirical mean/std
             mean_emp = self.t_params["mean_emp"]
@@ -1792,22 +1762,7 @@ class OptimalFCalculator(OptimizationStrategy):
 
     @staticmethod
     def _sigma_bounds_to_returns(sigma_bounds: list[float], df: float, loc: float, scale: float) -> tuple[float, float]:
-        """
-        Convert sigma bounds (z-scores) to actual return bounds.
-
-        Parameters
-        ----------
-        sigma_bounds : list[float]
-            [lower_sigma, upper_sigma] e.g., [-3.5, 5.7]
-        df, loc, scale : float
-            Student-t distribution parameters
-
-        Returns
-        -------
-        tuple[float, float]
-            (lower_return_bound, upper_return_bound)
-
-        """
+        """Convert sigma bounds (z-scores) to actual return bounds."""
         if df <= 2:
             raise ValueError(f"Student-t std is undefined for df <= 2. Got df={df}")
 
@@ -1820,7 +1775,7 @@ class OptimalFCalculator(OptimizationStrategy):
 
     def calculate_optimal_f(
         self,
-        sigma_bounds: list[float] | None = "use_instance",
+        sigma_bounds: list[float] | str | None = "use_instance",
         sigma_bounds_margin: tuple[float, float] | None = None,
         f_min: float = 0.0,
         f_max: float = 5.0,
@@ -1859,7 +1814,7 @@ class OptimalFCalculator(OptimizationStrategy):
         """
         # Determine which sigma bounds to use
         use_bounds = True
-        if sigma_bounds == "use_instance":
+        if isinstance(sigma_bounds, str):
             sigma_bounds = self.sigma_bounds.copy()
         elif sigma_bounds is None:
             use_bounds = False
@@ -1868,7 +1823,7 @@ class OptimalFCalculator(OptimizationStrategy):
             sigma_bounds = sigma_bounds.copy()
 
         # Apply margin if provided and bounds are being used
-        if use_bounds and sigma_bounds_margin is not None:
+        if use_bounds and sigma_bounds is not None and sigma_bounds_margin is not None:
             sigma_bounds = [sigma_bounds[0] + sigma_bounds_margin[0], sigma_bounds[1] + sigma_bounds_margin[1]]
 
         rng = np.random.default_rng(seed)
@@ -1879,18 +1834,14 @@ class OptimalFCalculator(OptimizationStrategy):
 
         # Apply sigma bounds clipping only if use_bounds is True
         if use_bounds:
+            assert sigma_bounds is not None
             df = self.t_params["t_df"]
             loc = self.t_params["t_loc"]
             scale = self.t_params["t_scale"]
 
             if df > 2:
                 # Use t-based sigma
-                lower_bound, upper_bound = self._sigma_bounds_to_returns(
-                    sigma_bounds,
-                    df,
-                    loc,
-                    scale,
-                )
+                lower_bound, upper_bound = self._sigma_bounds_to_returns(sigma_bounds, df, loc, scale)
             else:
                 # Fallback: Normal-style bounds using empirical mean/std
                 mean_emp = self.t_params["mean_emp"]
@@ -1960,7 +1911,7 @@ class OptimalFCalculator(OptimizationStrategy):
         expected_growth = np.concatenate(expected_growth)
 
         # Find optima
-        best_idx = np.argmax(expected_growth)
+        best_idx = int(np.argmax(expected_growth))
         f_star = f_values[best_idx] * fraction
         g_star = expected_growth[best_idx]
 
@@ -2011,6 +1962,10 @@ class OptimalFCalculator(OptimizationStrategy):
 
         for d in rebal_dates:
             end_loc = ret.index.get_loc(d)
+            if not isinstance(end_loc, int):
+                if verbose:
+                    print(f"Skipping {d}: non-unique index location")
+                continue
 
             start_loc = max(0, end_loc - lookback + 1) if not anchored else 0
 
@@ -2118,21 +2073,13 @@ class OptimalFCalculator(OptimizationStrategy):
         return pd.DataFrame(records).set_index("date")
 
     def plot_distribution_fit(self, figsize: tuple[int, int] = (14, 6)) -> None:
-        """
-        Plot histogram with fitted distributions and Q-Q plot.
-
-        Parameters
-        ----------
-        figsize : tuple[int, int], default (14, 6)
-            Figure size (width, height)
-
-        """
+        """Plot histogram with fitted distributions and Q-Q plot."""
         returns = self.portfolio_returns.copy()
         if self.exclude_zeros:
             returns = returns.loc[returns != 0]
         ret = returns.to_numpy()
 
-        fig, axes = plt.subplots(1, 2, figsize=figsize)
+        _fig, axes = plt.subplots(1, 2, figsize=figsize)
 
         # Plot 1: Histogram with fitted distributions
         x_min, x_max = ret.min(), ret.max()
@@ -2154,7 +2101,10 @@ class OptimalFCalculator(OptimizationStrategy):
 
         # Plot 2: Q-Q plot
         probplot(
-            ret, dist=t, sparams=(self.t_params["t_df"], self.t_params["t_loc"], self.t_params["t_scale"]), plot=axes[1]
+            ret,
+            dist=t,  # pyright: ignore[reportArgumentType]
+            sparams=(self.t_params["t_df"], self.t_params["t_loc"], self.t_params["t_scale"]),
+            plot=axes[1],
         )
         axes[1].set_title("Q-Q Plot: Student-t Fit", fontweight="bold")
         axes[1].grid(True, linestyle=":", alpha=0.6)
@@ -2177,8 +2127,8 @@ class OptimalFCalculator(OptimizationStrategy):
         print(f"  Min Return:               {self.t_params['min_return']:.6f}")
         print(f"  Max Return:               {self.t_params['max_return']:.6f}")
         print("\nSigma Bounds:")
-        print(f"  Z-score Min:              {self.sigma_bounds[0]:.2f} σ")
-        print(f"  Z-score Max:              {self.sigma_bounds[1]:.2f} σ")
+        print(f"  Z-score Min:              {self.sigma_bounds[0]:.2f} σ")  # noqa: RUF001
+        print(f"  Z-score Max:              {self.sigma_bounds[1]:.2f} σ")  # noqa: RUF001
 
         # Calculate theoretical std
         if self.t_params["t_df"] > 2:
