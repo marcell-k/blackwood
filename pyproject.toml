@@ -31,16 +31,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-viz = [
-  "matplotlib>=3.9",
-  "plotly>=5.22",
-  "seaborn>=0.13.2",
-  "nbformat>=5.7",
-]
+viz = ["matplotlib>=3.9", "plotly>=5.22", "seaborn>=0.13.2", "nbformat>=5.7"]
 
-portfolio = [
-  "cvxpy>=1.5",
-]
+portfolio = ["cvxpy>=1.5"]
 
 dev = [
   "pytest>=8.2",
@@ -83,15 +76,16 @@ src = ["src"]
 
 [tool.ruff.lint]
 select = [
-  "E", "W",   # pycodestyle
-  "F",        # pyflakes
-  "I",        # isort
-  "UP",       # pyupgrade (enforces 3.13 type syntax)
-  "ANN",      # flake8-annotations
-  "B",        # flake8-bugbear
-  "SIM",      # flake8-simplify
-  "TCH",      # flake8-type-checking
-  "RUF",      # ruff-specific
+  "E",
+  "W",   # pycodestyle
+  "F",   # pyflakes
+  "I",   # isort
+  "UP",  # pyupgrade (enforces 3.13 type syntax)
+  "ANN", # flake8-annotations
+  "B",   # flake8-bugbear
+  "SIM", # flake8-simplify
+  "TCH", # flake8-type-checking
+  "RUF", # ruff-specific
 ]
 ignore = ["ANN101", "ANN102", "ANN003", "ANN002"]
 
@@ -106,11 +100,7 @@ source = ["blackwood"]
 branch = true
 
 [tool.coverage.report]
-exclude_lines = [
-  "pragma: no cover",
-  "if TYPE_CHECKING:",
-  "@overload",
-]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "@overload"]
 
 [tool.uv.sources]
-backtesting = { git = "ssh://git@github.com/marcell-k/backtesting.git" }
+backtesting = { path = "/Users/marci/Trading/backtesting", editable = true }
