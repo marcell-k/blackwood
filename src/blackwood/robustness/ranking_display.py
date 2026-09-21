@@ -83,10 +83,10 @@ def mini_bar(
     return bar
 
 
-def score_color(v: float) -> str:
-    if v >= 0.65:
+def score_color(v: float, tier1_score: float = 0.8, tier2_score: float = 0.6) -> str:
+    if v >= tier1_score:
         return C_GREEN
-    if v >= 0.52:
+    if v >= tier2_score:
         return C_YELLOW
     return C_GREY
 
@@ -233,7 +233,7 @@ def _fmt_pair_value(v) -> str:
 
 
 def _resolve_identity(
-    d: dict[str, object],
+    d: dict[str, int],
     use_time_window: bool,
     fallback_keys: Iterable[str],
     width: int,
@@ -323,8 +323,10 @@ def render_row(
     include_rrr: bool = True,
     include_portion: bool = True,
     include_nmb_c: bool = True,
+    tier1_score: float = 0.8,
+    tier2_score: float = 0.6,
 ) -> str:
-    sc = score_color(d["composite"])
+    sc = score_color(d["composite"], tier1_score=tier1_score, tier2_score=tier2_score)
     bg = BG_ROW_A if idx % 2 == 0 else BG_ROW_B
 
     # Left-border accent
@@ -401,11 +403,11 @@ def render_title(n: int, include_train_sh: bool = False) -> str:
     return "\n" + BOLD + C_TEXT + title + RESET + "\n" + C_DIM + sub + RESET + "\n"
 
 
-def render_legend(include_train_sh: bool = False) -> str:
+def render_legend(include_train_sh: bool = False, tier1_score: float = 0.8, tier2_score: float = 0.6) -> str:
     parts = [
-        f"{C_GREEN}█{RESET} score ≥0.65",
-        f"{C_YELLOW}█{RESET} score ≥0.52",
-        f"{C_GREY}█{RESET} score <0.52",
+        f"{C_GREEN}█{RESET} score ≥{tier1_score:.2f}",
+        f"{C_YELLOW}█{RESET} score ≥{tier2_score:.2f}",
+        f"{C_GREY}█{RESET} score <{tier2_score:.2f}",
         f"  OOS: {C_GREEN}+{RESET}=positive  {C_RED}-{RESET}=negative",
         f"  DD:  {C_GREEN}low{RESET}  {C_YELLOW}>15%{RESET}  {C_RED}>25%{RESET}",
     ]
@@ -424,7 +426,9 @@ def _normalize_metric_policy(metric_policy: object) -> str:
     return "p25"
 
 
-def display_ranking(df: pd.DataFrame, metric_policy: str = "p25") -> None:
+def display_ranking(
+    df: pd.DataFrame, metric_policy: str = "p25", tier1_score: float = 0.8, tier2_score: float = 0.6
+) -> None:
     """
     Render a compact terminal dashboard for ranking results.
 
@@ -544,5 +548,5 @@ def display_ranking(df: pd.DataFrame, metric_policy: str = "p25") -> None:
             )
         )
     print(render_separator(total_width))
-    print(render_legend(include_train_sh=include_train_sh))
+    print(render_legend(include_train_sh=include_train_sh, tier1_score=tier1_score, tier2_score=tier2_score))
     print()

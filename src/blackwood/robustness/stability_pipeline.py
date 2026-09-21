@@ -227,14 +227,22 @@ def _is_perf_soft_penalty(values: np.ndarray, floor: float, softness: float) -> 
     """
     Exponential soft penalty for low IS performance.
 
-    penalty = exp(-max(0, floor - perf) / softness)
+    `values` are first min-max normalized to [0, 1] so that `floor` and
+    `softness` are interpreted consistently regardless of the underlying
+    metric's native scale. Without this, `floor`/`softness` calibrated for
+    the already-normalized "sharpe_ulcer_80_20" policy (values roughly in
+    [0, 1]) push almost everything to penalty ~0 or ~1 when `is_perf_metric`
+    is switched to a raw-Sharpe policy ("median"/"p25"/"mean"/"blend").
+
+    penalty = exp(-max(0, floor - normalized_perf) / softness)
     """
     arr = np.asarray(values, dtype=float)
+    normalized = _minmax_normalize(arr, lower_is_better=False)
     softness_safe = max(float(softness), 1e-9)
-    shortfall = np.maximum(0.0, float(floor) - arr)
+    shortfall = np.maximum(0.0, float(floor) - normalized)
     penalty = np.exp(-shortfall / softness_safe)
     penalty = np.clip(penalty, 0.0, 1.0)
-    penalty[~np.isfinite(arr)] = 0.0
+    penalty[~np.isfinite(normalized)] = 0.0
     return penalty.astype(float)
 
 
@@ -270,12 +278,12 @@ class StabilityConfig:
     max_folds: int = 5
     purged_weeks: int = 1
     embargo_weeks: int = 1
-    n_bootstrap: int = 200
+    n_bootstrap: int = 1000
     block_length_days: int = 20
     performance_percentile: float = 0.2
-    cv_threshold: float = 0.8
+    cv_threshold: float = 0.5
     stability_radius_per_dim: float = 0.02
-    stability_min_neighbors: int = 1
+    stability_min_neighbors: int = 5
     stability_score_threshold: float = 0.5
     weight_performance: float = 0.65
     weight_stability: float = 0.20
@@ -290,12 +298,12 @@ class StabilityConfig:
     phase5_weight_proximity_stability: float = 0.10
     phase5_weight_oos_robustness: float = 0.05
     top_n_candidates: int = 20
-    n_jobs: int = 2
-    cpcv_eval_top_k: int = 0
+    n_jobs: int = 6
+    cpcv_eval_top_k: int = 20
     oos_sharpe_min: float = 0.8
     oos_degradation_min: float = 0.6
     oos_maxdd_max_pct: float = 25.0
-    neigh_n: int = 60
+    neigh_n: int = 15
     neigh_n_quick: int = 30
     neigh_radius: float = 0.10
     neigh_pass_min: float = 0.70
@@ -987,6 +995,8 @@ class OOSValidator:
                 and np.isfinite(deg_sharpe)
                 and deg_sharpe >= self.config.oos_degradation_min
                 and oos_trades >= 10
+                and np.isfinite(oos_maxdd)
+                and oos_maxdd <= self.config.oos_maxdd_max_pct
             )
 
             neigh_pass_rate, neigh_sharpe_p05, pass_neighborhood = 0.0, np.nan, False
@@ -1003,6 +1013,9 @@ class OOSValidator:
                         continue
                     s2 = float(st2.get("Sharpe Ratio", np.nan))
                     t2 = int(st2.get("# Trades", 0))
+                    dd2_raw = float(st2.get("Max. Drawdown [%]", np.nan))
+                    dd2 = abs(dd2_raw) if np.isfinite(dd2_raw) else np.nan
+
                     if not np.isfinite(s2):
                         continue
                     sharpes.append(s2)
@@ -1013,6 +1026,8 @@ class OOSValidator:
                         and s2 >= self.config.oos_sharpe_min
                         and deg2 >= self.config.oos_degradation_min
                         and t2 >= 10
+                        and np.isfinite(dd2)
+                        and dd2 <= self.config.oos_maxdd_max_pct
                     ):
                         passed += 1
                 if valid > 0:
@@ -1541,7 +1556,12 @@ class ParameterStabilityPipeline:
 
         from blackwood.robustness.ranking_display import display_ranking
 
-        display_ranking(self._final_ranking, metric_policy=self.config.is_perf_metric)
+        display_ranking(
+            self._final_ranking,
+            metric_policy=self.config.is_perf_metric,
+            tier1_score=self.config.tier1_score,
+            tier2_score=self.config.tier2_score,
+        )
 
     def get_tier_parameters(self, tier: int = 1) -> pd.DataFrame:
         if self._final_ranking is None:

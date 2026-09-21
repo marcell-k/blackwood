@@ -154,31 +154,6 @@ class OptunaStabilityAnalyzer:
             raise ValueError(f"score_sensitivity_param '{selected}' has no valid values.")
         return selected
 
-    def _choose_discrete_param(
-        self,
-        completed_trials: pd.DataFrame,
-        preferred: str,
-        fallback: str | None = None,
-        max_unique: int = 12,
-    ) -> str | None:
-        def is_candidate(param_name: str) -> bool:
-            if param_name not in completed_trials.columns:
-                return False
-            if not pd.api.types.is_numeric_dtype(completed_trials[param_name]):
-                return False
-            unique_count = completed_trials[param_name].dropna().nunique()
-            return 1 < unique_count <= max_unique
-
-        if is_candidate(preferred):
-            return preferred
-        if fallback is not None and is_candidate(fallback):
-            return fallback
-
-        for param_name in self.param_space:
-            if is_candidate(param_name):
-                return param_name
-        return None
-
     def compute_stability_metrics(
         self,
         completed_trials: pd.DataFrame,
@@ -565,9 +540,6 @@ class OptunaStabilityAnalyzer:
                 linewidth=0,
             )
 
-        top_map = top_trials.set_index("number", drop=False) if "number" in top_trials.columns else top_trials
-        _ = top_map  # keep lint clean while preserving local future use
-
         for idx, group_values in enumerate(groups, start=1):
             ax.text(
                 idx,
@@ -902,7 +874,6 @@ class OptunaStabilityAnalyzer:
             ax.set_title("Coefficient of Variation Comparison")
             return
 
-        np.arange(len(param_names))
         width = 0.38
         cv_all = [float(metrics[p]["cv_all"]) for p in param_names if p in metrics]
         cv_top = [float(metrics[p]["cv_top"]) for p in param_names if p in metrics]
