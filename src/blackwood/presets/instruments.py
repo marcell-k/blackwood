@@ -40,11 +40,14 @@ BROKER_SPREADS = {
     "USBrentCrudeOil": 8.026712900532974e-05,
     "USLightCrudeOil": 8.026712900532974e-05,
 }
+# $3.5 per 100k notional per side; backtesting.py applies it at entry and exit
+FX_COMMISSION = (0, 3.5 / 100_000)  # (fixed, relative)
+
 BROKER_COMMISSION = {
     # ===== Crypto =====
     "BTCUSD": (0, 0),
     "ETHUSD": (0, 0),
-    # 'BTCEUR' : (3.5/100_000, 0),
+    # 'BTCEUR' : FX_COMMISSION,
     # ===== Indices =====
     "CA60": (0, 0),
     "DAX": (0, 0),
@@ -62,18 +65,18 @@ BROKER_COMMISSION = {
     "Switzerland20": (0, 0),
     "HK50": (0, 0),
     "Japan225": (0, 0),
-    "QQQ": (3.5 / 100_000, 0),
+    "QQQ": FX_COMMISSION,
     # ===== FX =====
-    "EURUSD": (3.5 / 100_000, 0),
-    "EURCHF": (3.5 / 100_000, 0),
-    "AUDUSD": (3.5 / 100_000, 0),
-    "GBPUSD": (3.5 / 100_000, 0),
-    "USDJPY": (3.5 / 100_000, 0),
-    "EURJPY": (3.5 / 100_000, 0),
-    "GBPJPY": (3.5 / 100_000, 0),
-    "USDCHF": (3.5 / 100_000, 0),
-    "EURGBP": (3.5 / 100_000, 0),
-    "USDCAD": (3.5 / 100_000, 0),
+    "EURUSD": FX_COMMISSION,
+    "EURCHF": FX_COMMISSION,
+    "AUDUSD": FX_COMMISSION,
+    "GBPUSD": FX_COMMISSION,
+    "USDJPY": FX_COMMISSION,
+    "EURJPY": FX_COMMISSION,
+    "GBPJPY": FX_COMMISSION,
+    "USDCHF": FX_COMMISSION,
+    "EURGBP": FX_COMMISSION,
+    "USDCAD": FX_COMMISSION,
     # ===== Metals =====
     "XAUUSD": (0, 0),
     "XAGUSD": (0, 0),
