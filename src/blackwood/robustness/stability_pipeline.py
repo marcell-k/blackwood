@@ -4,6 +4,7 @@ import hashlib
 import os
 import re
 import tempfile
+import warnings
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -303,8 +304,8 @@ class StabilityConfig:
     oos_sharpe_min: float = 0.8
     oos_degradation_min: float = 0.6
     oos_maxdd_max_pct: float = 25.0
-    neigh_n: int = 15
-    neigh_n_quick: int = 30
+    neigh_n: int = 30
+    neigh_n_quick: int = 15
     neigh_radius: float = 0.10
     neigh_pass_min: float = 0.70
     tier1_score: float = 0.8
@@ -347,7 +348,9 @@ class BacktestRunner:
             finalize_trades=True,
             trade_on_close=True,
         )
-        return bt.run()
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, module="backtesting")
+            return bt.run()
 
     def as_bt_func(self, strategy_class: type[Strategy]) -> BacktestFunc:
         """Return a `bt_func`-shaped closure bound to `strategy_class`, for use with GridOptimizer/OptunaOptimizer."""
